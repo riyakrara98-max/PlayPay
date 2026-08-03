@@ -1,0 +1,103 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        getUserData().role == 'admin';
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Default catch-all security net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(userId) &&
+        request.resource.data.uid == userId &&
+        request.resource.data.role == 'user';
+      allow update: if (
+        request.resource.data.uid == resource.data.uid &&
+        request.resource.data.email == resource.data.email &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.role == resource.data.role
+      ) && (
+        isAdmin() || (
+          isOwner(userId) &&
+          request.resource.data.isBanned == resource.data.isBanned &&
+          request.resource.data.isActive == resource.data.isActive
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Tasks Collection
+    match /tasks/{taskId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Enrollments Collection
+    match /enrollments/{enrollmentId} {
+      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.status == 'pending';
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId &&
+        request.resource.data.taskId == resource.data.taskId &&
+        request.resource.data.enrolledAt == resource.data.enrolledAt &&
+        (
+          // Case 1: Submission / Resubmission update
+          (
+            (resource.data.status == 'pending' || resource.data.status == 'rejected') &&
+            request.resource.data.status == 'pending'
+          ) ||
+          // Case 2: Payment request update on approved enrollment
+          (
+            resource.data.status == 'approved' &&
+            request.resource.data.status == 'approved' &&
+            request.resource.data.paymentStatus == 'requested'
+          )
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Site Settings Collection
+    match /siteSettings/{settingsId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Admin Activity Audit Log Collection
+    match /adminActivity/{activityId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+  }
+}

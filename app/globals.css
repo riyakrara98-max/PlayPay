@@ -1,0 +1,152 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+:root {
+  /* Color System - Light Mode */
+  --bg: #F8FAFC;
+  --surface: #FFFFFF;
+  --surface-elevated: #F1F5F9;
+  --border: #E2E8F0;
+  --border-hover: #CBD5E1;
+
+  --primary: #2563EB;
+  --primary-fg: #FFFFFF;
+  --primary-hover: #1D4ED8;
+
+  --secondary: #64748B;
+  --secondary-fg: #FFFFFF;
+  --secondary-hover: #475569;
+
+  --accent: #7C3AED;
+  --accent-fg: #FFFFFF;
+  --accent-hover: #6D28D9;
+
+  --success: #10B981;
+  --success-fg: #FFFFFF;
+  --success-hover: #059669;
+
+  --warning: #F59E0B;
+  --warning-fg: #FFFFFF;
+  --warning-hover: #D97706;
+
+  --danger: #EF4444;
+  --danger-fg: #FFFFFF;
+  --danger-hover: #DC2626;
+
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-muted: #94A3B8;
+
+  --focus-ring: #3B82F6;
+  --overlay: rgba(15, 23, 42, 0.4);
+
+  /* Shadows - Light Mode */
+  --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.05);
+  --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.1), 0 4px 6px -4px rgba(15, 23, 42, 0.05);
+  --shadow-glow: 0 0 15px rgba(37, 99, 235, 0.15);
+
+  /* Border Radius Scale */
+  --radius-sm: 0.25rem;  /* 4px */
+  --radius-md: 0.5rem;   /* 8px */
+  --radius-lg: 0.75rem;  /* 12px */
+  --radius-xl: 1rem;     /* 16px */
+  --radius-2xl: 1.5rem;  /* 24px */
+}
+
+.dark {
+  /* Color System - Dark Mode */
+  --bg: #0B0F19;
+  --surface: #111827;
+  --surface-elevated: #1F2937;
+  --border: #1F2937;
+  --border-hover: #374151;
+
+  --primary: #3B82F6;
+  --primary-fg: #FFFFFF;
+  --primary-hover: #60A5FA;
+
+  --secondary: #4B5563;
+  --secondary-fg: #F9FAFB;
+  --secondary-hover: #6B7280;
+
+  --accent: #8B5CF6;
+  --accent-fg: #FFFFFF;
+  --accent-hover: #A78BFA;
+
+  --success: #10B981;
+  --success-fg: #FFFFFF;
+  --success-hover: #34D399;
+
+  --warning: #F59E0B;
+  --warning-fg: #FFFFFF;
+  --warning-hover: #FBBF24;
+
+  --danger: #EF4444;
+  --danger-fg: #FFFFFF;
+  --danger-hover: #F87171;
+
+  --text-primary: #F9FAFB;
+  --text-secondary: #9CA3AF;
+  --text-muted: #6B7280;
+
+  --focus-ring: #60A5FA;
+  --overlay: rgba(0, 0, 0, 0.7);
+
+  /* Shadows - Dark Mode Glows */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 0 1px rgba(255, 255, 255, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.6), 0 0 2px rgba(255, 255, 255, 0.1);
+  --shadow-glow: 0 0 20px rgba(59, 130, 246, 0.25);
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-body), system-ui, -apple-system, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading), system-ui, sans-serif;
+}
+
+.font-mono {
+  font-family: var(--font-mono), monospace;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: var(--radius-sm);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  display: inline-block;
+  white-space: nowrap;
+  animation: marquee 25s linear infinite;
+}

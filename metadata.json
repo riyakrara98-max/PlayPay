@@ -1,0 +1,6 @@
+{
+  "name": "PlayPay Design System",
+  "description": "PlayPay platform with Phase 1B production-ready backend, authentication layer, and Firebase integration",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

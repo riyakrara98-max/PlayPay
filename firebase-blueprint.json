@@ -1,0 +1,103 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile document stored under /users/{uid}",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string", "maxLength": 100 },
+        "photoURL": { "type": "string", "maxLength": 500 },
+        "phoneNumber": { "type": "string", "maxLength": 15 },
+        "upiId": { "type": "string", "maxLength": 100 },
+        "bankName": { "type": "string", "maxLength": 100 },
+        "accountHolder": { "type": "string", "maxLength": 100 },
+        "accountNumber": { "type": "string", "maxLength": 30 },
+        "ifscCode": { "type": "string", "maxLength": 20 },
+        "lastProfileUpdateAt": { "type": "string", "format": "date-time" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "lastLoginAt": { "type": "string", "format": "date-time" },
+        "isActive": { "type": "boolean" },
+        "isBanned": { "type": "boolean" }
+      },
+      "required": ["uid", "email", "role", "createdAt", "lastLoginAt", "isActive", "isBanned"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "Task item stored under /tasks/{taskId}",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "category": { "type": "string" },
+        "rewardAmount": { "type": "number" },
+        "maxSubmissions": { "type": "number" },
+        "currentSubmissions": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "paused", "completed", "draft"] },
+        "instructions": { "type": "string", "maxLength": 2000 },
+        "proofType": { "type": "string", "enum": ["screenshot", "text", "both"] },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "description", "category", "rewardAmount", "maxSubmissions", "currentSubmissions", "status", "createdBy", "createdAt", "updatedAt"]
+    },
+    "Enrollment": {
+      "title": "Enrollment",
+      "description": "User task enrollment and proof submission stored under /enrollments/{enrollmentId}",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "taskId": { "type": "string" },
+        "taskTitle": { "type": "string" },
+        "rewardAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "proofUrl": { "type": "string" },
+        "proofNotes": { "type": "string", "maxLength": 1000 },
+        "rejectionReason": { "type": "string", "maxLength": 500 },
+        "submittedAt": { "type": "string", "format": "date-time" },
+        "reviewedAt": { "type": "string", "format": "date-time" },
+        "reviewedBy": { "type": "string" }
+      },
+      "required": ["id", "userId", "taskId", "status", "submittedAt"]
+    },
+    "SiteSettings": {
+      "title": "SiteSettings",
+      "description": "Global application configuration stored under /siteSettings/global",
+      "type": "object",
+      "properties": {
+        "siteName": { "type": "string", "maxLength": 100 },
+        "logo": { "type": "string", "maxLength": 500 },
+        "announcement": { "type": "string", "maxLength": 500 },
+        "maintenanceMode": { "type": "boolean" },
+        "paymentEligibilityDays": { "type": "number" },
+        "adminWhatsAppNumber": { "type": "string", "maxLength": 20 },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["siteName", "logo", "announcement", "maintenanceMode", "paymentEligibilityDays", "adminWhatsAppNumber", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User documents"
+    },
+    "/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/Task" },
+      "description": "Task documents"
+    },
+    "/enrollments/{enrollmentId}": {
+      "schema": { "$ref": "#/entities/Enrollment" },
+      "description": "Task enrollments"
+    },
+    "/siteSettings/{settingsId}": {
+      "schema": { "$ref": "#/entities/SiteSettings" },
+      "description": "Site global settings"
+    }
+  }
+}
