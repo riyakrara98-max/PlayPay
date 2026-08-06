@@ -1,5 +1,6 @@
 import { AuthError } from 'firebase/auth';
 import { getFirebaseAuth } from '@/firebase/config';
+import { safeSerializeValue } from '@/lib/audit-logger';
 
 export enum OperationType {
   CREATE = 'create',
@@ -77,13 +78,13 @@ export function mapAuthError(error: unknown): string {
 }
 
 /**
- * Structured Firestore error handler per PlayPay system architecture.
+ * Formats structured Firestore error payload.
  */
-export function handleFirestoreError(
+export function formatFirestoreError(
   error: unknown,
   operationType: OperationType,
   path: string | null
-): never {
+): string {
   let currentUser = null;
   try {
     currentUser = getFirebaseAuth().currentUser;
@@ -109,7 +110,36 @@ export function handleFirestoreError(
     },
   };
 
-  const jsonMessage = JSON.stringify(errInfo);
+  try {
+    const clean = safeSerializeValue(errInfo);
+    return JSON.stringify(clean);
+  } catch {
+    return `[Firestore Error]: ${errInfo.error}`;
+  }
+}
+
+/**
+ * Logs a structured Firestore error without throwing.
+ */
+export function logFirestoreError(
+  error: unknown,
+  operationType: OperationType,
+  path: string | null
+): void {
+  const jsonMessage = formatFirestoreError(error, operationType, path);
+  console.error('[PlayPay Firestore Error]:', jsonMessage);
+}
+
+/**
+ * Structured Firestore error handler per PlayPay system architecture.
+ * Logs and throws a structured JSON Error.
+ */
+export function handleFirestoreError(
+  error: unknown,
+  operationType: OperationType,
+  path: string | null
+): never {
+  const jsonMessage = formatFirestoreError(error, operationType, path);
   console.error('[PlayPay Firestore Error]:', jsonMessage);
   throw new Error(jsonMessage);
 }

@@ -1,23 +1,43 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   collection,
   onSnapshot,
+  getDocs,
+  startAfter,
   doc,
   updateDoc,
+  setDoc,
+  deleteDoc,
+  writeBatch,
+  serverTimestamp,
   query,
   orderBy,
+  limit,
+  QueryDocumentSnapshot,
+  DocumentData,
 } from 'firebase/firestore';
-import { getFirebaseDb, isFirebaseConfigured } from '@/firebase/config';
+import { getFirebaseDb } from '@/firebase/config';
 import {
   UserDocument,
   FIRESTORE_COLLECTIONS,
 } from '@/types/firestore';
 import { logAdminActivity } from '@/lib/audit-logger';
 import { useToast } from '@/hooks/use-toast';
+import { getSafeTime } from '@/utils/formatters';
 
-export type UserFilterStatus = 'all' | 'active' | 'banned' | 'admin' | 'users' | 'recently_joined';
+export type UserFilterStatus =
+  | 'all'
+  | 'active'
+  | 'banned'
+  | 'admin'
+  | 'users'
+  | 'recently_joined'
+  | 'team_leaders'
+  | 'direct_members'
+  | 'pending'
+  | 'team_members';
 export type UserSortOption = 'newest' | 'oldest' | 'name' | 'tasks_completed';
 
 export function useAdminUsers(adminUid?: string, adminName?: string, adminEmail?: string) {
@@ -29,21 +49,56 @@ export function useAdminUsers(adminUid?: string, adminName?: string, adminEmail?
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<UserFilterStatus>('all');
   const [sortBy, setSortBy] = useState<UserSortOption>('newest');
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
-  // Realtime subscription to users collection
-  useEffect(() => {
-    if (!isFirebaseConfigured()) {
-      setLoading(false);
-      return;
+  const PAGE_SIZE = 50;
+  const page1UsersRef = useRef<UserDocument[]>([]);
+  const extraUsersRef = useRef<UserDocument[]>([]);
+  const lastDocRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || !lastDocRef.current) return;
+
+    setLoadingMore(true);
+    try {
+      const db = getFirebaseDb();
+      const colRef = collection(db, FIRESTORE_COLLECTIONS.USERS);
+      const q = query(
+        colRef,
+        orderBy('createdAt', 'desc'),
+        startAfter(lastDocRef.current),
+        limit(PAGE_SIZE)
+      );
+
+      const snapshot = await getDocs(q);
+      const newDocs: UserDocument[] = snapshot.docs.map((d) => ({
+        uid: d.id,
+        ...(d.data() as Omit<UserDocument, 'uid'>),
+      }));
+
+      extraUsersRef.current = [...extraUsersRef.current, ...newDocs];
+      if (snapshot.docs.length > 0) {
+        lastDocRef.current = snapshot.docs[snapshot.docs.length - 1];
+      }
+      setHasMore(snapshot.docs.length >= PAGE_SIZE);
+      setUsers([...page1UsersRef.current, ...extraUsersRef.current]);
+    } catch (err) {
+      console.error('[useAdminUsers loadMore error]', err);
+    } finally {
+      setLoadingMore(false);
     }
+  }, [loadingMore, hasMore]);
 
+  // Realtime subscription to initial page of users collection with cursor pagination support
+  useEffect(() => {
     setLoading(true);
     setError(null);
 
     try {
       const db = getFirebaseDb();
       const colRef = collection(db, FIRESTORE_COLLECTIONS.USERS);
-      const q = query(colRef, orderBy('createdAt', 'desc'));
+      const q = query(colRef, orderBy('createdAt', 'desc'), limit(PAGE_SIZE));
 
       const unsubscribe = onSnapshot(
         q,
@@ -52,7 +107,14 @@ export function useAdminUsers(adminUid?: string, adminName?: string, adminEmail?
             uid: d.id,
             ...(d.data() as Omit<UserDocument, 'uid'>),
           }));
-          setUsers(docs);
+          page1UsersRef.current = docs;
+
+          if (extraUsersRef.current.length === 0) {
+            lastDocRef.current = snapshot.docs[snapshot.docs.length - 1] || null;
+            setHasMore(snapshot.docs.length >= PAGE_SIZE);
+          }
+
+          setUsers([...page1UsersRef.current, ...extraUsersRef.current]);
           setLoading(false);
         },
         (err) => {
@@ -103,6 +165,18 @@ export function useAdminUsers(adminUid?: string, adminName?: string, adminEmail?
       case 'users':
         result = result.filter((u) => u.role === 'user');
         break;
+      case 'team_leaders':
+        result = result.filter((u) => u.memberType === 'team_leader');
+        break;
+      case 'direct_members':
+        result = result.filter((u) => u.memberType === 'direct');
+        break;
+      case 'pending':
+        result = result.filter((u) => u.memberType === 'pending');
+        break;
+      case 'team_members':
+        result = result.filter((u) => u.memberType === 'team_member');
+        break;
       case 'recently_joined':
         result = result.filter((u) => u.createdAt >= sevenDaysAgo);
         break;
@@ -114,7 +188,7 @@ export function useAdminUsers(adminUid?: string, adminName?: string, adminEmail?
     // Sort
     result.sort((a, b) => {
       if (sortBy === 'oldest') {
-        return (a.createdAt || '').localeCompare(b.createdAt || '');
+        return getSafeTime(a.createdAt) - getSafeTime(b.createdAt);
       }
       if (sortBy === 'name') {
         return (a.displayName || a.email || '').localeCompare(b.displayName || b.email || '');
@@ -123,7 +197,7 @@ export function useAdminUsers(adminUid?: string, adminName?: string, adminEmail?
         return (b.totalTasksCompleted || 0) - (a.totalTasksCompleted || 0);
       }
       // default: newest
-      return (b.createdAt || '').localeCompare(a.createdAt || '');
+      return getSafeTime(b.createdAt) - getSafeTime(a.createdAt);
     });
 
     return result;
@@ -146,12 +220,11 @@ export function useAdminUsers(adminUid?: string, adminName?: string, adminEmail?
         const userRef = doc(db, FIRESTORE_COLLECTIONS.USERS, targetUserId);
         const targetUser = users.find((u) => u.uid === targetUserId);
 
-        const now = new Date().toISOString();
         const updateData = {
           isBanned: true,
           banReason: reason.trim(),
           bannedBy: adminUid,
-          bannedAt: now,
+          bannedAt: serverTimestamp(),
         };
 
         await updateDoc(userRef, updateData);
@@ -294,11 +367,298 @@ export function useAdminUsers(adminUid?: string, adminName?: string, adminEmail?
     [adminUid, adminName, adminEmail, users, toast]
   );
 
+  // Promote or Edit Team Leader
+  const saveTeamLeader = useCallback(
+    async (
+      targetUserId: string,
+      leaderCode: string,
+      isLeaderActive: boolean,
+      targetMemberType: 'team_leader' | 'direct' | 'pending' | 'team_member' = 'team_leader'
+    ) => {
+      if (!adminUid) {
+        toast({ variant: 'error', message: 'Unauthorized action.' });
+        return;
+      }
+
+      try {
+        const db = getFirebaseDb();
+        const userRef = doc(db, FIRESTORE_COLLECTIONS.USERS, targetUserId);
+        const targetUser = users.find((u) => u.uid === targetUserId);
+
+        // Feature 1 Protection: Prevent Team Leader removal while members exist
+        if (targetUser?.memberType === 'team_leader' && targetMemberType !== 'team_leader') {
+          const teamSize = users.filter((u) => u.leaderId === targetUserId).length;
+          if (teamSize > 0) {
+            const errorMsg = `This Team Leader still has ${teamSize} active member(s). Transfer or remove all team members before changing this role.`;
+            toast({
+              variant: 'error',
+              title: 'Role Change Rejected',
+              message: errorMsg,
+            });
+            throw new Error(errorMsg);
+          }
+        }
+
+        // Permanent Leader Code Rule:
+        // Always preserve existing leaderCode if user already has one. Generate/use new code ONLY if leaderCode is null/empty.
+        const existingCode = targetUser?.leaderCode?.trim().toUpperCase();
+        const finalLeaderCode = (existingCode && existingCode.length > 0)
+          ? existingCode
+          : leaderCode.trim().toUpperCase();
+
+        const oldCode = existingCode;
+
+        const updateData = {
+          memberType: targetMemberType,
+          leaderCode: finalLeaderCode,
+          isLeaderActive: isLeaderActive,
+        };
+
+        const batch = writeBatch(db);
+        batch.update(userRef, updateData);
+
+        // Keep leaderCodes lookup document synchronized atomically
+        if (targetMemberType === 'team_leader') {
+          if (oldCode && oldCode !== finalLeaderCode) {
+            batch.delete(doc(db, FIRESTORE_COLLECTIONS.LEADER_CODES, oldCode));
+          }
+          const leaderCodeRef = doc(db, FIRESTORE_COLLECTIONS.LEADER_CODES, finalLeaderCode);
+          batch.set(
+            leaderCodeRef,
+            {
+              leaderId: targetUserId,
+              leaderCode: finalLeaderCode,
+              memberType: targetMemberType,
+              isLeaderActive: isLeaderActive,
+              updatedAt: new Date().toISOString(),
+              createdAt: targetUser?.createdAt || new Date().toISOString(),
+            },
+            { merge: true }
+          );
+        } else if (oldCode) {
+          batch.delete(doc(db, FIRESTORE_COLLECTIONS.LEADER_CODES, oldCode));
+        }
+
+        await batch.commit();
+
+        await logAdminActivity({
+          action: 'Team Leader Saved',
+          performedBy: adminUid,
+          performedByName: adminName,
+          performedByEmail: adminEmail,
+          targetType: 'user',
+          targetId: targetUserId,
+          targetName: targetUser?.displayName || targetUser?.email || targetUserId,
+          details: `Leader Code: ${leaderCode}, Active: ${isLeaderActive}, MemberType: ${targetMemberType}`,
+          before: {
+            memberType: targetUser?.memberType,
+            leaderCode: targetUser?.leaderCode,
+            isLeaderActive: targetUser?.isLeaderActive,
+          },
+          after: updateData,
+        });
+
+        toast({
+          variant: 'success',
+          title: 'Team Leader Updated',
+          message: `Team Leader settings saved successfully.`,
+        });
+      } catch (err) {
+        console.error('[saveTeamLeader error]', err);
+        const msg = err instanceof Error ? err.message : String(err);
+        toast({
+          variant: 'error',
+          title: 'Failed to Save Team Leader',
+          message: msg,
+        });
+        throw err;
+      }
+    },
+    [adminUid, adminName, adminEmail, users, toast]
+  );
+
+  // Toggle Leader Active Status (Enable / Disable Leader)
+  const toggleLeaderActiveStatus = useCallback(
+    async (targetUserId: string, newActiveState: boolean) => {
+      if (!adminUid) {
+        toast({ variant: 'error', message: 'Unauthorized action.' });
+        return;
+      }
+
+      try {
+        const db = getFirebaseDb();
+        const userRef = doc(db, FIRESTORE_COLLECTIONS.USERS, targetUserId);
+        const targetUser = users.find((u) => u.uid === targetUserId);
+
+        const batch = writeBatch(db);
+        batch.update(userRef, { isLeaderActive: newActiveState });
+
+        // Synchronize leaderCodes mapping document if user has a leaderCode atomically
+        if (targetUser?.leaderCode) {
+          const code = targetUser.leaderCode.trim().toUpperCase();
+          const leaderCodeRef = doc(db, FIRESTORE_COLLECTIONS.LEADER_CODES, code);
+          batch.set(
+            leaderCodeRef,
+            {
+              memberType: targetUser.memberType || 'team_leader',
+              isLeaderActive: newActiveState,
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
+        }
+
+        await batch.commit();
+
+        const actionText = newActiveState ? 'Team Leader Enabled' : 'Team Leader Disabled';
+
+        await logAdminActivity({
+          action: actionText,
+          performedBy: adminUid,
+          performedByName: adminName,
+          performedByEmail: adminEmail,
+          targetType: 'user',
+          targetId: targetUserId,
+          targetName: targetUser?.displayName || targetUser?.email || targetUserId,
+          details: `isLeaderActive set to ${newActiveState}`,
+          before: { isLeaderActive: targetUser?.isLeaderActive },
+          after: { isLeaderActive: newActiveState },
+        });
+
+        toast({
+          variant: newActiveState ? 'success' : 'warning',
+          title: actionText,
+          message: `Team Leader is now ${newActiveState ? 'enabled' : 'disabled'}.`,
+        });
+      } catch (err) {
+        console.error('[toggleLeaderActiveStatus error]', err);
+        const msg = err instanceof Error ? err.message : String(err);
+        toast({
+          variant: 'error',
+          title: 'Failed to update Leader Status',
+          message: msg,
+        });
+        throw err;
+      }
+    },
+    [adminUid, adminName, adminEmail, users, toast]
+  );
+
+  // Update Member Custom Reward (Phase 4)
+  const updateMemberReward = useCallback(
+    async (targetUserId: string, reward: number | null) => {
+      if (!adminUid) {
+        toast({ variant: 'error', message: 'Unauthorized action.' });
+        return;
+      }
+
+      try {
+        const db = getFirebaseDb();
+        const userRef = doc(db, FIRESTORE_COLLECTIONS.USERS, targetUserId);
+        const targetUser = users.find((u) => u.uid === targetUserId);
+
+        await updateDoc(userRef, {
+          effectiveReward: reward,
+        });
+
+        await logAdminActivity({
+          action: 'Member Reward Configured',
+          performedBy: adminUid,
+          performedByName: adminName,
+          performedByEmail: adminEmail,
+          targetType: 'user',
+          targetId: targetUserId,
+          targetName: targetUser?.displayName || targetUser?.email || targetUserId,
+          details: reward === null ? 'Reset to Task Default' : `Effective Reward set to ₹${reward}`,
+          before: { effectiveReward: targetUser?.effectiveReward ?? null },
+          after: { effectiveReward: reward },
+        });
+
+        toast({
+          variant: 'success',
+          title: 'Member Reward Updated',
+          message:
+            reward === null
+              ? 'Reset to original task default reward.'
+              : `Member reward updated to ₹${reward}.`,
+        });
+      } catch (err) {
+        console.error('[updateMemberReward error]', err);
+        const msg = err instanceof Error ? err.message : String(err);
+        toast({
+          variant: 'error',
+          title: 'Failed to update Member Reward',
+          message: msg,
+        });
+        throw err;
+      }
+    },
+    [adminUid, adminName, adminEmail, users, toast]
+  );
+
+  // Bulk Update Member Custom Rewards (Phase 4A)
+  const bulkUpdateMemberRewards = useCallback(
+    async (
+      targetUserIds: string[],
+      reward: number | null,
+      onProgress?: (completed: number, total: number) => void
+    ): Promise<{ updated: number; failed: number }> => {
+      if (!adminUid) {
+        toast({ variant: 'error', message: 'Unauthorized action.' });
+        return { updated: 0, failed: targetUserIds.length };
+      }
+
+      let updatedCount = 0;
+      let failedCount = 0;
+      const total = targetUserIds.length;
+
+      for (let i = 0; i < total; i++) {
+        const uid = targetUserIds[i];
+        try {
+          const db = getFirebaseDb();
+          const userRef = doc(db, FIRESTORE_COLLECTIONS.USERS, uid);
+          await updateDoc(userRef, { effectiveReward: reward });
+          updatedCount++;
+        } catch (err) {
+          console.error(`[bulkUpdateMemberRewards Error for ${uid}]`, err);
+          failedCount++;
+        }
+        if (onProgress) {
+          onProgress(updatedCount + failedCount, total);
+        }
+      }
+
+      await logAdminActivity({
+        action: 'Bulk Member Rewards Updated',
+        performedBy: adminUid,
+        performedByName: adminName,
+        performedByEmail: adminEmail,
+        targetType: 'user',
+        targetId: 'bulk',
+        targetName: `${updatedCount} member(s)`,
+        details: `Bulk effectiveReward set to ${reward === null ? 'Task Default' : '₹' + reward} for ${updatedCount} user(s).`,
+        before: {},
+        after: { effectiveReward: reward, totalTargeted: total, updated: updatedCount, failed: failedCount },
+      });
+
+      toast({
+        variant: failedCount === 0 ? 'success' : 'warning',
+        title: 'Bulk Reward Update Completed',
+        message: `Successfully updated ${updatedCount} member(s).${failedCount > 0 ? ` Failed: ${failedCount}.` : ''}`,
+      });
+
+      return { updated: updatedCount, failed: failedCount };
+    },
+    [adminUid, adminName, adminEmail, users, toast]
+  );
+
   return {
     users,
     filteredUsers,
     loading,
     error,
+    hasMore,
+    loadMore,
     searchQuery,
     setSearchQuery,
     filterStatus,
@@ -308,5 +668,9 @@ export function useAdminUsers(adminUid?: string, adminName?: string, adminEmail?
     banUser,
     unbanUser,
     toggleUserActive,
+    saveTeamLeader,
+    toggleLeaderActiveStatus,
+    updateMemberReward,
+    bulkUpdateMemberRewards,
   };
 }

@@ -12,7 +12,7 @@ import {
   SetOptions,
 } from 'firebase/firestore';
 import { getFirebaseDb } from '@/firebase/config';
-import { handleFirestoreError, OperationType } from '@/lib/firebase-errors';
+import { logFirestoreError, OperationType } from '@/lib/firebase-errors';
 
 /**
  * Fetches a single document by ID from Firestore with strict typing.
@@ -22,6 +22,7 @@ export async function getTypedDocument<T>(
   docId: string
 ): Promise<T | null> {
   const path = `${collectionName}/${docId}`;
+
   try {
     const db = getFirebaseDb();
     const docRef = doc(db, collectionName, docId);
@@ -29,7 +30,8 @@ export async function getTypedDocument<T>(
     if (!snap.exists()) return null;
     return { id: snap.id, ...snap.data() } as unknown as T;
   } catch (error) {
-    handleFirestoreError(error, OperationType.GET, path);
+    logFirestoreError(error, OperationType.GET, path);
+    return null;
   }
 }
 
@@ -43,12 +45,13 @@ export async function setTypedDocument<T extends DocumentData>(
   options?: SetOptions
 ): Promise<void> {
   const path = `${collectionName}/${docId}`;
+
   try {
     const db = getFirebaseDb();
     const docRef = doc(db, collectionName, docId);
     await setDoc(docRef, data, options || {});
   } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, path);
+    logFirestoreError(error, OperationType.WRITE, path);
   }
 }
 
@@ -61,12 +64,13 @@ export async function updateTypedDocument<T extends DocumentData>(
   data: Partial<T>
 ): Promise<void> {
   const path = `${collectionName}/${docId}`;
+
   try {
     const db = getFirebaseDb();
     const docRef = doc(db, collectionName, docId);
     await updateDoc(docRef, data as DocumentData);
   } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, path);
+    logFirestoreError(error, OperationType.UPDATE, path);
   }
 }
 
@@ -78,12 +82,13 @@ export async function deleteTypedDocument(
   docId: string
 ): Promise<void> {
   const path = `${collectionName}/${docId}`;
+
   try {
     const db = getFirebaseDb();
     const docRef = doc(db, collectionName, docId);
     await deleteDoc(docRef);
   } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, path);
+    logFirestoreError(error, OperationType.DELETE, path);
   }
 }
 
@@ -101,6 +106,8 @@ export async function getTypedCollection<T>(
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as unknown as T));
   } catch (error) {
-    handleFirestoreError(error, OperationType.LIST, collectionName);
+    logFirestoreError(error, OperationType.LIST, collectionName);
+    return [];
   }
 }
+

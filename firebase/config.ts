@@ -121,13 +121,18 @@ export function getFirebaseAuth(): Auth {
   return firebaseAuthInstance;
 }
 
+export const FIRESTORE_DATABASE_ID =
+  process.env.NEXT_PUBLIC_FIREBASE_DATABASE_ID ||
+  process.env.FIREBASE_DATABASE_ID ||
+  'ai-studio-playpaydesignsys-e3954cab-cc50-4eeb-a127-2a8cdf0fdbf7';
+
 /**
  * Returns the singleton Firestore instance.
  */
 export function getFirebaseDb(): Firestore {
   if (!firebaseDbInstance) {
     const app = getFirebaseApp();
-    firebaseDbInstance = getFirestore(app);
+    firebaseDbInstance = getFirestore(app, FIRESTORE_DATABASE_ID);
   }
   return firebaseDbInstance;
 }

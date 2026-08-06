@@ -63,13 +63,13 @@ export function Breadcrumbs({
   return (
     <nav
       aria-label="Breadcrumb navigation"
-      className={cn('flex items-center text-xs text-[var(--text-muted)]', className)}
+      className={cn('flex items-center text-[13px] text-[var(--ink-mute)]', className)}
     >
-      <ol className="flex items-center flex-wrap gap-1.5">
+      <ol className="flex items-center flex-wrap gap-2">
         <li className="inline-flex items-center">
           <Link
             href="/"
-            className="inline-flex items-center gap-1 hover:text-[var(--text-primary)] transition-colors focus-visible:outline-2 focus-visible:outline-[var(--primary)] rounded-xs"
+            className="inline-flex items-center gap-1.5 hover:text-[var(--ink)] transition-colors focus-visible:outline-2 focus-visible:outline-[var(--primary)] rounded-xs"
           >
             <Home className="w-3.5 h-3.5" />
             <span className="sr-only sm:not-sr-only sm:inline-block font-medium">
@@ -82,19 +82,19 @@ export function Breadcrumbs({
           const isLast = index === items.length - 1;
 
           return (
-            <li key={item.href} className="inline-flex items-center gap-1.5">
-              <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" aria-hidden="true" />
+            <li key={item.href} className="inline-flex items-center gap-2">
+              <ChevronRight className="w-3.5 h-3.5 text-[var(--ink-mute-2)] shrink-0" aria-hidden="true" />
               {isLast ? (
                 <span
                   aria-current="page"
-                  className="font-semibold text-[var(--text-primary)] truncate max-w-[150px] sm:max-w-none"
+                  className="font-medium text-[var(--ink)] truncate max-w-[150px] sm:max-w-none"
                 >
                   {item.label}
                 </span>
               ) : (
                 <Link
                   href={item.href}
-                  className="hover:text-[var(--text-primary)] transition-colors font-medium truncate max-w-[120px] sm:max-w-none focus-visible:outline-2 focus-visible:outline-[var(--primary)] rounded-xs"
+                  className="hover:text-[var(--ink)] transition-colors font-medium truncate max-w-[120px] sm:max-w-none focus-visible:outline-2 focus-visible:outline-[var(--primary)] rounded-xs"
                 >
                   {item.label}
                 </Link>

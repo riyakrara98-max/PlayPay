@@ -236,7 +236,7 @@ export default function AdminSettingsPage() {
       />
 
       <ContentContainer variant="card" className="p-4 sm:p-6 space-y-8">
-        <form onSubmit={handleSave} className="space-y-8">
+        <form onSubmit={handleSave} className="space-y-8 pb-20 md:pb-0">
           {/* Section 1: General Branding */}
           <div className="space-y-4">
             <h3 className="text-base font-extrabold text-[var(--text-primary)] flex items-center gap-2 border-b border-[var(--border)] pb-2.5">
@@ -472,14 +472,14 @@ export default function AdminSettingsPage() {
             </div>
           )}
 
-          {/* Submit Action */}
-          <div className="flex justify-end pt-4 border-t border-[var(--border)]">
+          {/* Submit Action - Responsive Sticky Mobile Action Bar */}
+          <div className="fixed bottom-0 left-0 right-0 md:relative bg-white/95 dark:bg-slate-900/95 backdrop-blur-md md:backdrop-blur-none border-t border-[var(--border)] md:border-t-0 py-3.5 px-4 md:p-0 z-40 md:z-auto shadow-[0_-5px_25px_rgba(0,0,0,0.06)] md:shadow-none flex justify-end pb-[calc(14px+env(safe-area-inset-bottom))] md:pb-0">
             <Button
               type="submit"
               variant="primary"
               size="md"
               disabled={isSaving || settingsLoading}
-              className="bg-[var(--brand)] hover:opacity-90 text-white min-w-[160px]"
+              className="bg-[var(--brand)] hover:opacity-90 text-white min-w-[160px] w-full md:w-auto h-11 rounded-xl font-bold transition-all"
             >
               {isSaving ? (
                 <>

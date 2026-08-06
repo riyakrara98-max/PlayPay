@@ -34,7 +34,7 @@ export function SidebarLayout({
         {header}
 
         {/* Scrollable Main Content */}
-        <main id="main-content" tabIndex={-1} className="flex-1 w-full focus:outline-none p-4 sm:p-6 lg:p-8">
+        <main id="main-content" tabIndex={-1} className="flex-1 w-full focus:outline-none pb-[env(safe-area-inset-bottom)] md:pb-0">
           {children}
         </main>
       </div>

@@ -36,25 +36,25 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
     const inputId = id || backupId;
 
     const sizeStyles: Record<ComponentSize, string> = {
-      sm: 'h-8 text-xs px-2.5',
-      md: 'h-10 text-sm px-3',
-      lg: 'h-12 text-base px-4',
+      sm: 'h-10 text-[16px] px-3',
+      md: 'h-12 text-[16px] px-4',
+      lg: 'h-14 text-[16px] px-4',
     };
 
     return (
-      <div className={cn('flex flex-col gap-1.5', fullWidth && 'w-full')}>
+      <div className={cn('flex flex-col gap-2', fullWidth && 'w-full')}>
         {label && (
           <label
             htmlFor={inputId}
-            className="text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1"
+            className="text-[14px] font-medium text-[var(--ink-secondary)] flex items-center gap-1"
           >
             {label}
-            {required && <span className="text-[var(--danger)]">*</span>}
+            {required && <span className="text-[var(--ruby)]">*</span>}
           </label>
         )}
         <div className="relative flex items-center w-full">
           {leftIcon && (
-            <div className="absolute left-3 text-[var(--text-muted)] pointer-events-none flex items-center justify-center">
+            <div className="absolute left-3 text-[var(--ink-mute)] pointer-events-none flex items-center justify-center">
               {leftIcon}
             </div>
           )}
@@ -64,27 +64,27 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             disabled={disabled}
             required={required}
             className={cn(
-              'w-full bg-[var(--surface)] text-[var(--text-primary)] border rounded-[var(--radius-md)] transition-colors placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--focus-ring)] disabled:bg-[var(--surface-elevated)] disabled:cursor-not-allowed min-h-[44px] sm:min-h-0',
+              'w-full bg-[var(--canvas)] text-[var(--ink)] border rounded-[var(--radius-md)] transition-colors placeholder:text-[var(--ink-mute-2)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)] focus:border-[var(--primary)] disabled:bg-[var(--canvas-soft)] disabled:cursor-not-allowed min-h-[48px] sm:min-h-0',
               error
-                ? 'border-[var(--danger)] focus:ring-[var(--danger)]'
-                : 'border-[var(--border)] hover:border-[var(--border-hover)] focus:border-[var(--primary)]',
-              leftIcon && 'pl-9',
-              rightIcon && 'pr-9',
+                ? 'border-[var(--ruby)] focus:ring-[var(--ruby)] focus:border-[var(--ruby)]'
+                : 'border-[var(--hairline-input)] hover:border-[var(--primary-soft)]',
+              leftIcon && 'pl-10',
+              rightIcon && 'pr-10',
               sizeStyles[size],
               className
             )}
             {...props}
           />
           {rightIcon && (
-            <div className="absolute right-3 text-[var(--text-muted)] flex items-center justify-center">
+            <div className="absolute right-3 text-[var(--ink-mute)] flex items-center justify-center">
               {rightIcon}
             </div>
           )}
         </div>
         {error ? (
-          <p className="text-xs text-[var(--danger)] font-medium">{error}</p>
+          <p className="text-[13px] text-[var(--ruby)] font-medium mt-1">{error}</p>
         ) : helperText ? (
-          <p className="text-xs text-[var(--text-secondary)]">{helperText}</p>
+          <p className="text-[13px] text-[var(--ink-mute)] mt-1">{helperText}</p>
         ) : null}
       </div>
     );

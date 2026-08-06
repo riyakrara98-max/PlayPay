@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   CreditCard,
   CheckCircle2,
@@ -15,7 +15,7 @@ import {
   HelpCircle,
   CheckCheck,
 } from 'lucide-react';
-import { where, doc, updateDoc } from 'firebase/firestore';
+import { where, doc, runTransaction, serverTimestamp } from 'firebase/firestore';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -27,7 +27,7 @@ import { EnrollmentDocument, FIRESTORE_COLLECTIONS } from '@/types/firestore';
 import { PaymentCard } from '@/components/payment/PaymentCard';
 import { WhatsAppConfirmationModal } from '@/components/payment/WhatsAppConfirmationModal';
 import { TaskGridSkeleton } from '@/components/tasks/TaskCardSkeleton';
-import { handleFirestoreError, OperationType } from '@/lib/firebase-errors';
+import { logFirestoreError, OperationType } from '@/lib/firebase-errors';
 
 export default function PaymentPage() {
   const { currentUser, loading: authLoading } = useAuthContext();
@@ -108,15 +108,27 @@ export default function PaymentPage() {
       const db = getFirebaseDb();
       const docRef = doc(db, FIRESTORE_COLLECTIONS.ENROLLMENTS, selectedEnrollment.id);
 
-      const currentCount = selectedEnrollment.whatsAppRequestCount || 0;
+      await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(docRef);
+        if (!snap.exists()) {
+          throw new Error('Enrollment document not found.');
+        }
 
-      await updateDoc(docRef, {
-        paymentStatus: 'requested',
-        paymentRequestedAt: new Date().toISOString(),
-        lastWhatsAppRequestAt: new Date().toISOString(),
-        whatsAppRequestCount: currentCount + 1,
-        lastUpdatedAt: new Date().toISOString(),
-        lastUpdatedBy: userId,
+        const data = snap.data();
+        if (data.paymentStatus === 'paid') {
+          throw new Error('Payment for this task has already been completed.');
+        }
+
+        const currentCount = data.whatsAppRequestCount || 0;
+
+        transaction.update(docRef, {
+          paymentStatus: 'requested',
+          paymentRequestedAt: serverTimestamp(),
+          lastWhatsAppRequestAt: serverTimestamp(),
+          whatsAppRequestCount: currentCount + 1,
+          lastUpdatedAt: serverTimestamp(),
+          lastUpdatedBy: userId,
+        });
       });
 
       setToastMessage({
@@ -127,13 +139,13 @@ export default function PaymentPage() {
       setIsModalOpen(false);
       setSelectedEnrollment(null);
     } catch (err) {
-      handleFirestoreError(
+      logFirestoreError(
         err,
         OperationType.UPDATE,
         `${FIRESTORE_COLLECTIONS.ENROLLMENTS}/${selectedEnrollment.id}`
       );
       setToastMessage({
-        text: 'Failed to update payment status. Please try again.',
+        text: err instanceof Error ? err.message : 'Failed to update payment status. Please try again.',
         type: 'error',
       });
     } finally {

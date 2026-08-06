@@ -28,7 +28,7 @@ export function Card({
     <motion.div
       whileHover={isHoverable ? { y: -2, transition: { duration: 0.15 } } : undefined}
       className={cn(
-        'rounded-[var(--radius-lg)] p-5 text-[var(--text-primary)] transition-all',
+        'rounded-[var(--radius-lg)] p-6 text-[var(--text-primary)] transition-all bg-[var(--surface)]',
         variantStyles[variant],
         isHoverable && 'hover:shadow-md cursor-pointer',
         className
@@ -42,7 +42,7 @@ export function Card({
 
 export function CardHeader({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn('flex flex-col gap-1 mb-4', className)} {...props}>
+    <div className={cn('flex flex-col gap-2 mb-6', className)} {...props}>
       {children}
     </div>
   );
@@ -50,7 +50,7 @@ export function CardHeader({ className, children, ...props }: React.HTMLAttribut
 
 export function CardTitle({ className, children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
   return (
-    <h3 className={cn('text-lg font-bold text-[var(--text-primary)] tracking-tight', className)} {...props}>
+    <h3 className={cn('text-[22px] tracking-tight font-display font-medium text-[var(--ink)]', className)} {...props}>
       {children}
     </h3>
   );
@@ -58,7 +58,7 @@ export function CardTitle({ className, children, ...props }: React.HTMLAttribute
 
 export function CardDescription({ className, children, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
   return (
-    <p className={cn('text-xs text-[var(--text-secondary)] leading-relaxed', className)} {...props}>
+    <p className={cn('text-[15px] text-[var(--ink-mute)] leading-relaxed', className)} {...props}>
       {children}
     </p>
   );

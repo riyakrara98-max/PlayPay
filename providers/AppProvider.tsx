@@ -8,6 +8,9 @@ import { AuthModalProvider } from '@/contexts/AuthModalContext';
 import { SiteSettingsProvider } from '@/contexts/SiteSettingsContext';
 import { MaintenanceGuard } from '@/components/layout/MaintenanceGuard';
 import { AuthModal } from '@/components/auth/AuthModal';
+import { OnboardingModal } from '@/components/auth/OnboardingModal';
+import { isFirebaseConfigured } from '@/firebase/config';
+import { FirebaseConfigError } from '@/components/config/FirebaseConfigError';
 
 interface AppProviderProps {
   children: React.ReactNode;
@@ -17,6 +20,15 @@ interface AppProviderProps {
  * Root application provider aggregating all context providers.
  */
 export function AppProvider({ children }: AppProviderProps) {
+  if (!isFirebaseConfigured()) {
+    return (
+      <ThemeProvider defaultTheme="system">
+        <FirebaseConfigError />
+        <div style={{ display: "none" }}>{children}</div>
+      </ThemeProvider>
+    );
+  }
+
   return (
     <ThemeProvider defaultTheme="system">
       <ToastProvider position="bottom-right">
@@ -27,6 +39,7 @@ export function AppProvider({ children }: AppProviderProps) {
                 {children}
               </MaintenanceGuard>
               <AuthModal />
+              <OnboardingModal />
             </SiteSettingsProvider>
           </AuthModalProvider>
         </AuthProvider>
@@ -34,3 +47,4 @@ export function AppProvider({ children }: AppProviderProps) {
     </ThemeProvider>
   );
 }
+

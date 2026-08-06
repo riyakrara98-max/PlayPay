@@ -1,26 +1,32 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   collection,
   query,
   onSnapshot,
+  getDocs,
+  startAfter,
   doc,
   runTransaction,
   serverTimestamp,
   increment,
   getDoc,
+  orderBy,
+  limit,
   DocumentData,
   QueryDocumentSnapshot,
 } from 'firebase/firestore';
-import { getFirebaseDb, isFirebaseConfigured } from '@/firebase/config';
+import { getFirebaseDb } from '@/firebase/config';
 import {
   EnrollmentDocument,
   EnrollmentStatus,
   PaymentStatus,
+  TaskDocument,
   FIRESTORE_COLLECTIONS,
 } from '@/types/firestore';
 import { useToast } from '@/hooks/use-toast';
+import { getSafeTime, parseDateInput } from '@/utils/formatters';
 
 export type SubmissionsTab =
   | 'pending'
@@ -58,32 +64,143 @@ export function useAdminSubmissions(adminUid?: string) {
     endDate: '',
   });
 
-  // Realtime listener for enrollments collection
-  useEffect(() => {
-    if (!isFirebaseConfigured()) {
-      queueMicrotask(() => {
-        setLoading(false);
-        setError('Firebase environment is not configured.');
-      });
-      return;
-    }
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
+  const PAGE_SIZE = 50;
+
+  // Task Document Cache and In-Flight tracking for N+1 optimization
+  const taskCacheRef = useRef<Map<string, TaskDocument>>(new Map());
+  const missingTaskIdsInFlightRef = useRef<Set<string>>(new Set());
+  const rawEnrollmentsRef = useRef<EnrollmentDocument[]>([]);
+  const page1EnrollmentsRef = useRef<EnrollmentDocument[]>([]);
+  const extraEnrollmentsRef = useRef<EnrollmentDocument[]>([]);
+  const lastEnrollmentDocRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
+
+  // Function to merge raw enrollments with task cache and state
+  const mergeAndSetSubmissions = useCallback((rawEnrollments: EnrollmentDocument[]) => {
+    const list: EnrollmentDocument[] = rawEnrollments.map((item) => {
+      const tid = item.taskId || item.lockedTaskId || '';
+      const task = tid ? taskCacheRef.current.get(tid) : undefined;
+
+      if (task) {
+        const resolvedAppName =
+          task.appName ||
+          task.title ||
+          (item.appName && item.appName !== 'Unknown App' ? item.appName : 'Unknown App');
+        const resolvedAppIcon = task.appIcon || task.appIconUrl || item.appIcon || '';
+        const resolvedTaskTitle =
+          task.title ||
+          (item.taskTitle && item.taskTitle !== 'Untitled Task' ? item.taskTitle : 'Untitled Task');
+        const resolvedCategory = task.category || item.category || 'app_download';
+        const resolvedReward =
+          item.lockedReward ??
+          item.reward ??
+          item.rewardAmount ??
+          task.rewardAmount ??
+          0;
+        const resolvedPackageName = task.packageName || (item as any).packageName || '';
+
+        return {
+          ...item,
+          appName: resolvedAppName,
+          appIcon: resolvedAppIcon,
+          taskTitle: resolvedTaskTitle,
+          category: resolvedCategory,
+          reward: Number(resolvedReward),
+          rewardAmount: Number(resolvedReward),
+          packageName: resolvedPackageName,
+        };
+      }
+
+      return item;
+    });
+
+    // Sort: Default tab "pending" sorts oldest submittedAt first.
+    // For other tabs, sort newest submittedAt / enrolledAt first.
+    list.sort((a, b) => {
+      const timeA = getSafeTime(a.submittedAt || a.enrolledAt);
+      const timeB = getSafeTime(b.submittedAt || b.enrolledAt);
+      return timeA - timeB; // Oldest first
+    });
+
+    setSubmissions(list);
+    setLoading(false);
+  }, []);
+
+  // Fetch missing task documents on demand (deduplicated & batched)
+  const fetchMissingTasks = useCallback(
+    async (missingIds: string[]) => {
+      if (missingIds.length === 0) return;
+
+      const db = getFirebaseDb();
+      missingIds.forEach((id) => missingTaskIdsInFlightRef.current.add(id));
+
+      try {
+        const fetchPromises = missingIds.map(async (tid) => {
+          try {
+            const taskDocRef = doc(db, FIRESTORE_COLLECTIONS.TASKS, tid);
+            const taskSnap = await getDoc(taskDocRef);
+            if (taskSnap.exists()) {
+              taskCacheRef.current.set(tid, { id: tid, ...taskSnap.data() } as TaskDocument);
+            }
+          } catch (err) {
+            console.warn(`[useAdminSubmissions] Failed to fetch task ${tid}:`, err);
+          } finally {
+            missingTaskIdsInFlightRef.current.delete(tid);
+          }
+        });
+
+        await Promise.all(fetchPromises);
+        mergeAndSetSubmissions(rawEnrollmentsRef.current);
+      } catch (err) {
+        console.error('[useAdminSubmissions] Error fetching missing tasks:', err);
+      }
+    },
+    [mergeAndSetSubmissions]
+  );
+
+  // Realtime listeners for tasks and enrollments
+  useEffect(() => {
     queueMicrotask(() => {
       setLoading(true);
       setError(null);
     });
 
     const db = getFirebaseDb();
-    const colRef = collection(db, FIRESTORE_COLLECTIONS.ENROLLMENTS);
-    const q = query(colRef);
 
-    const unsubscribe = onSnapshot(
+    // 1. Realtime listener for Tasks collection (populates task cache)
+    const tasksColRef = collection(db, FIRESTORE_COLLECTIONS.TASKS);
+    const unsubTasks = onSnapshot(
+      tasksColRef,
+      (tasksSnap) => {
+        tasksSnap.forEach((docSnap: QueryDocumentSnapshot<DocumentData>) => {
+          taskCacheRef.current.set(docSnap.id, {
+            id: docSnap.id,
+            ...docSnap.data(),
+          } as TaskDocument);
+        });
+
+        if (rawEnrollmentsRef.current.length > 0) {
+          mergeAndSetSubmissions(rawEnrollmentsRef.current);
+        }
+      },
+      (err) => {
+        console.warn('[useAdminSubmissions] Tasks snapshot warning:', err);
+      }
+    );
+
+    // 2. Realtime listener for initial page of Enrollments collection (PAGE_SIZE = 50)
+    const colRef = collection(db, FIRESTORE_COLLECTIONS.ENROLLMENTS);
+    const q = query(colRef, orderBy('enrolledAt', 'desc'), limit(PAGE_SIZE));
+
+    const unsubEnrollments = onSnapshot(
       q,
       (snapshot) => {
-        const list: EnrollmentDocument[] = [];
+        const rawList: EnrollmentDocument[] = [];
         snapshot.forEach((docSnap: QueryDocumentSnapshot<DocumentData>) => {
           const data = docSnap.data();
-          list.push({
+          rawList.push({
             id: docSnap.id,
             userId: data.userId || '',
             taskId: data.taskId || '',
@@ -130,27 +247,142 @@ export function useAdminSubmissions(adminUid?: string) {
           });
         });
 
-        // Sort: Default tab "pending" sorts oldest submittedAt first.
-        // For other tabs, sort newest submittedAt / enrolledAt first.
-        list.sort((a, b) => {
-          const timeA = new Date(a.submittedAt || a.enrolledAt).getTime();
-          const timeB = new Date(b.submittedAt || b.enrolledAt).getTime();
-          return timeA - timeB; // Oldest first
-        });
+        page1EnrollmentsRef.current = rawList;
 
-        setSubmissions(list);
-        setLoading(false);
+        if (extraEnrollmentsRef.current.length === 0) {
+          lastEnrollmentDocRef.current = snapshot.docs[snapshot.docs.length - 1] || null;
+          setHasMore(snapshot.docs.length >= PAGE_SIZE);
+        }
+
+        const combinedList = [...page1EnrollmentsRef.current, ...extraEnrollmentsRef.current];
+        rawEnrollmentsRef.current = combinedList;
+
+        // Check for missing task IDs in cache
+        const uniqueTaskIds = Array.from(
+          new Set(
+            combinedList.map((e) => e.taskId || e.lockedTaskId || '').filter((id) => id.length > 0)
+          )
+        );
+
+        const missingIds = uniqueTaskIds.filter(
+          (id) => !taskCacheRef.current.has(id) && !missingTaskIdsInFlightRef.current.has(id)
+        );
+
+        mergeAndSetSubmissions(combinedList);
+
+        if (missingIds.length > 0) {
+          fetchMissingTasks(missingIds);
+        }
       },
       (err) => {
-        console.error('[useAdminSubmissions] Snapshot error:', err);
+        console.error('[useAdminSubmissions] Enrollment snapshot error:', err);
         const msg = err instanceof Error ? err.message : 'Error fetching submissions';
         setError(msg);
         setLoading(false);
       }
     );
 
-    return () => unsubscribe();
-  }, []);
+    return () => {
+      unsubTasks();
+      unsubEnrollments();
+    };
+  }, [fetchMissingTasks, mergeAndSetSubmissions]);
+
+  // Load More callback using startAfter cursor pagination
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || !lastEnrollmentDocRef.current) return;
+
+    setLoadingMore(true);
+    try {
+      const db = getFirebaseDb();
+      const colRef = collection(db, FIRESTORE_COLLECTIONS.ENROLLMENTS);
+      const q = query(
+        colRef,
+        orderBy('enrolledAt', 'desc'),
+        startAfter(lastEnrollmentDocRef.current),
+        limit(PAGE_SIZE)
+      );
+
+      const snapshot = await getDocs(q);
+      const newEnrollments: EnrollmentDocument[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        newEnrollments.push({
+          id: docSnap.id,
+          userId: data.userId || '',
+          taskId: data.taskId || '',
+          userName: data.userName || 'Anonymous User',
+          userEmail: data.userEmail || '',
+          userAvatar: data.userAvatar || '',
+          appName: data.appName || 'Unknown App',
+          appIcon: data.appIcon || '',
+          taskTitle: data.taskTitle || 'Untitled Task',
+          category: data.category || 'app_download',
+          reward: Number(data.reward ?? data.rewardAmount ?? 0),
+          rewardAmount: Number(data.rewardAmount ?? data.reward ?? 0),
+          assignedComment: data.assignedComment || '',
+          commentIndex: data.commentIndex ?? null,
+          status: (data.status as EnrollmentStatus) || 'pending',
+          enrolledAt: data.enrolledAt || new Date().toISOString(),
+          submittedAt: data.submittedAt || null,
+          reviewedAt: data.reviewedAt || null,
+          reviewedBy: data.reviewedBy || '',
+          approvedAt: data.approvedAt || null,
+          rejectionReason: data.rejectionReason || '',
+          screenshotUrl: data.screenshotUrl || data.proofUrl || '',
+          userComment: data.userComment || data.proofNotes || '',
+          proofUrl: data.proofUrl || '',
+          proofNotes: data.proofNotes || '',
+          paymentStatus: (data.paymentStatus as PaymentStatus) || 'pending',
+          paymentRequestedAt: data.paymentRequestedAt || null,
+          lastWhatsAppRequestAt: data.lastWhatsAppRequestAt || null,
+          whatsAppRequestCount: data.whatsAppRequestCount || 0,
+          cloudinaryMetadata: data.cloudinaryMetadata || null,
+          submissionVersion: data.submissionVersion || 1,
+          resubmissionCount: data.resubmissionCount || 0,
+          lastUpdatedAt: data.lastUpdatedAt || null,
+          lastUpdatedBy: data.lastUpdatedBy || '',
+          canResubmit: Boolean(data.canResubmit),
+          lockedReward: data.lockedReward,
+          lockedTaskId: data.lockedTaskId,
+          lockedAssignedComment: data.lockedAssignedComment,
+          lockedCommentIndex: data.lockedCommentIndex,
+          processedBy: data.processedBy || '',
+          processingStartedAt: data.processingStartedAt || null,
+          paymentProcessedAt: data.paymentProcessedAt || null,
+          paymentReference: data.paymentReference || '',
+        });
+      });
+
+      extraEnrollmentsRef.current = [...extraEnrollmentsRef.current, ...newEnrollments];
+      if (snapshot.docs.length > 0) {
+        lastEnrollmentDocRef.current = snapshot.docs[snapshot.docs.length - 1];
+      }
+      setHasMore(snapshot.docs.length >= PAGE_SIZE);
+
+      const combinedList = [...page1EnrollmentsRef.current, ...extraEnrollmentsRef.current];
+      rawEnrollmentsRef.current = combinedList;
+
+      const uniqueTaskIds = Array.from(
+        new Set(
+          combinedList.map((e) => e.taskId || e.lockedTaskId || '').filter((id) => id.length > 0)
+        )
+      );
+      const missingIds = uniqueTaskIds.filter(
+        (id) => !taskCacheRef.current.has(id) && !missingTaskIdsInFlightRef.current.has(id)
+      );
+
+      mergeAndSetSubmissions(combinedList);
+
+      if (missingIds.length > 0) {
+        fetchMissingTasks(missingIds);
+      }
+    } catch (err) {
+      console.error('[useAdminSubmissions loadMore error]', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, hasMore, fetchMissingTasks, mergeAndSetSubmissions]);
 
   // Filtered Submissions logic
   const filteredSubmissions = useMemo(() => {
@@ -200,13 +432,13 @@ export function useAdminSubmissions(adminUid?: string) {
 
       // Date Range Filter
       if (filters.startDate) {
-        const itemDate = new Date(item.submittedAt || item.enrolledAt);
-        const startDate = new Date(filters.startDate);
+        const itemDate = (parseDateInput(item.submittedAt || item.enrolledAt) || new Date());
+        const startDate = (parseDateInput(filters.startDate) || new Date());
         if (itemDate < startDate) return false;
       }
       if (filters.endDate) {
-        const itemDate = new Date(item.submittedAt || item.enrolledAt);
-        const endDate = new Date(filters.endDate);
+        const itemDate = (parseDateInput(item.submittedAt || item.enrolledAt) || new Date());
+        const endDate = (parseDateInput(filters.endDate) || new Date());
         endDate.setHours(23, 59, 59, 999);
         if (itemDate > endDate) return false;
       }
@@ -231,7 +463,6 @@ export function useAdminSubmissions(adminUid?: string) {
   // Approve single submission using Firestore Atomic Transaction
   const approveSubmission = useCallback(
     async (enrollmentId: string) => {
-      if (!isFirebaseConfigured()) return;
       const db = getFirebaseDb();
       const reviewerId = adminUid || 'admin_user';
 
@@ -256,6 +487,10 @@ export function useAdminSubmissions(adminUid?: string) {
           const assignedComment = enrollData.assignedComment || '';
           const commentIndex = enrollData.commentIndex ?? null;
 
+          // Perform ALL transaction reads BEFORE any writes
+          const userRef = userId ? doc(db, FIRESTORE_COLLECTIONS.USERS, userId) : null;
+          const userSnap = userRef ? await transaction.get(userRef) : null;
+
           // 1. Lock reward, taskId, assignedComment, commentIndex and mark approved
           transaction.update(enrollRef, {
             status: 'approved',
@@ -271,17 +506,12 @@ export function useAdminSubmissions(adminUid?: string) {
           });
 
           // 2. Update user stats document
-          if (userId) {
-            const userRef = doc(db, FIRESTORE_COLLECTIONS.USERS, userId);
-            const userSnap = await transaction.get(userRef);
-
-            if (userSnap.exists()) {
-              transaction.update(userRef, {
-                totalTasksCompleted: increment(1),
-                lastTaskCompletedAt: serverTimestamp(),
-                weeklyStreak: increment(1),
-              });
-            }
+          if (userRef && userSnap && userSnap.exists()) {
+            transaction.update(userRef, {
+              totalTasksCompleted: increment(1),
+              lastTaskCompletedAt: serverTimestamp(),
+              weeklyStreak: increment(1),
+            });
           }
         });
 
@@ -307,7 +537,6 @@ export function useAdminSubmissions(adminUid?: string) {
   // Reject single submission using Firestore Atomic Transaction
   const rejectSubmission = useCallback(
     async (enrollmentId: string, reason: string) => {
-      if (!isFirebaseConfigured()) return;
       if (!reason || reason.trim().length < 10) {
         throw new Error('Rejection reason must be at least 10 characters long.');
       }
@@ -360,7 +589,7 @@ export function useAdminSubmissions(adminUid?: string) {
       enrollmentIds: string[],
       onProgress?: (completed: number, total: number) => void
     ) => {
-      if (!isFirebaseConfigured() || enrollmentIds.length === 0) return;
+      if (enrollmentIds.length === 0) return;
 
       let successCount = 0;
       let failCount = 0;
@@ -394,7 +623,6 @@ export function useAdminSubmissions(adminUid?: string) {
   // Start Processing Payment
   const startProcessingPayment = useCallback(
     async (enrollmentId: string) => {
-      if (!isFirebaseConfigured()) return;
       const db = getFirebaseDb();
       const reviewerId = adminUid || 'admin_user';
 
@@ -442,7 +670,6 @@ export function useAdminSubmissions(adminUid?: string) {
   // Mark Paid Payment
   const markPaidPayment = useCallback(
     async (enrollmentId: string, reference: string) => {
-      if (!isFirebaseConfigured()) return;
       if (!reference || !reference.trim()) {
         throw new Error('Transaction reference number is required.');
       }
@@ -503,6 +730,8 @@ export function useAdminSubmissions(adminUid?: string) {
     filters,
     setFilters,
     tabCounts,
+    hasMore,
+    loadMore,
     approveSubmission,
     rejectSubmission,
     bulkApprove,

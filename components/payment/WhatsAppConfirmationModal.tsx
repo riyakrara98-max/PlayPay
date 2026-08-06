@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { MessageSquare, CheckCircle2, XCircle, Loader2, Coins, ExternalLink } from 'lucide-react';
 import { EnrollmentDocument } from '@/types/firestore';
 

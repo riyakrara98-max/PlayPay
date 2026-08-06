@@ -4,6 +4,7 @@ import React from 'react';
 import { motion, HTMLMotionProps } from 'motion/react';
 import { cn } from '@/utils/cn';
 import { ComponentSize } from '@/types/ui';
+import { Slot } from '@radix-ui/react-slot';
 import { Spinner } from './spinner';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'accent' | 'success' | 'warning' | 'danger' | 'outline' | 'ghost';
@@ -39,17 +40,17 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ) => {
     const variantStyles: Record<ButtonVariant, string> = {
       primary:
-        'bg-[var(--primary)] text-[var(--primary-fg)] hover:bg-[var(--primary-hover)] border-transparent shadow-sm',
+        'bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--primary-hover)] active:bg-[var(--primary-press)] border-transparent shadow-sm',
       secondary:
-        'bg-[var(--surface-elevated)] text-[var(--text-primary)] hover:bg-[var(--border)] border-[var(--border)] shadow-sm',
+        'bg-[var(--canvas)] text-[var(--primary)] border-[var(--primary)] hover:bg-[var(--canvas-soft)] border shadow-sm',
       accent:
-        'bg-[var(--accent)] text-[var(--accent-fg)] hover:bg-[var(--accent-hover)] border-transparent shadow-sm',
+        'bg-[var(--brand-dark-900)] text-[var(--on-primary)] hover:opacity-90 border-transparent shadow-sm',
       success:
-        'bg-[var(--success)] text-[var(--success-fg)] hover:bg-[var(--success-hover)] border-transparent shadow-sm',
+        'bg-[var(--success)] text-white hover:opacity-90 border-transparent shadow-sm',
       warning:
-        'bg-[var(--warning)] text-[var(--warning-fg)] hover:bg-[var(--warning-hover)] border-transparent shadow-sm',
+        'bg-[var(--warning)] text-white hover:opacity-90 border-transparent shadow-sm',
       danger:
-        'bg-[var(--danger)] text-[var(--danger-fg)] hover:bg-[var(--danger-hover)] border-transparent shadow-sm',
+        'bg-[var(--ruby)] text-white hover:opacity-90 border-transparent shadow-sm',
       outline:
         'bg-transparent text-[var(--text-primary)] border-[var(--border)] hover:bg-[var(--surface-elevated)] hover:border-[var(--border-hover)]',
       ghost:
@@ -57,25 +58,58 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     };
 
     const sizeStyles: Record<ComponentSize, string> = {
-      sm: 'h-8 px-3 text-xs gap-1.5 rounded-[var(--radius-md)]',
-      md: 'h-10 px-4 text-sm font-medium gap-2 rounded-[var(--radius-md)]',
-      lg: 'h-12 px-6 text-base font-semibold gap-2.5 rounded-[var(--radius-lg)]',
+      sm: 'px-3 py-1.5 text-[14px] leading-none rounded-[var(--radius-pill)] gap-1.5',
+      md: 'px-4 py-2 text-[16px] leading-none rounded-[var(--radius-pill)] gap-2',
+      lg: 'px-6 py-3 text-[16px] font-medium leading-none rounded-[var(--radius-pill)] gap-2.5',
     };
+
+    const combinedClassName = cn(
+      'inline-flex items-center justify-center font-body border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)] disabled:opacity-50 disabled:cursor-not-allowed select-none min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0',
+      variantStyles[variant],
+      sizeStyles[size],
+      fullWidth && 'w-full',
+      className
+    );
+
+    if (asChild) {
+      const {
+        whileHover,
+        whileTap,
+        whileFocus,
+        whileDrag,
+        whileInView,
+        animate,
+        initial,
+        exit,
+        variants,
+        transition,
+        layout,
+        layoutId,
+        onAnimationStart,
+        onAnimationComplete,
+        ...slotProps
+      } = props;
+
+      return (
+        <Slot
+          ref={ref as any}
+          className={combinedClassName}
+          aria-disabled={disabled || isLoading ? true : undefined}
+          {...(slotProps as any)}
+        >
+          {children}
+        </Slot>
+      );
+    }
 
     return (
       <motion.button
         ref={ref}
         type={type}
-        whileTap={disabled || isLoading ? undefined : { scale: 0.98 }}
-        whileHover={disabled || isLoading ? undefined : { scale: 1.01 }}
+        whileTap={disabled || isLoading ? undefined : (props.whileTap ?? { scale: 0.98 })}
+        whileHover={disabled || isLoading ? undefined : (props.whileHover ?? { scale: 1.01 })}
         disabled={disabled || isLoading}
-        className={cn(
-          'inline-flex items-center justify-center font-sans border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)] disabled:opacity-50 disabled:cursor-not-allowed select-none min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0',
-          variantStyles[variant],
-          sizeStyles[size],
-          fullWidth && 'w-full',
-          className
-        )}
+        className={combinedClassName}
         {...props}
       >
         {isLoading ? (

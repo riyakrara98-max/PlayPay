@@ -53,6 +53,7 @@ import {
 } from '@/lib/profile-validation';
 import { EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { mapAuthError } from '@/lib/firebase-errors';
+import { formatDate } from '@/utils/formatters';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -233,11 +234,7 @@ export default function ProfilePage() {
   };
 
   const formattedDate = profile?.createdAt
-    ? new Date(profile.createdAt).toLocaleDateString('en-IN', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      })
+    ? formatDate(profile.createdAt)
     : 'N/A';
 
   if (profileLoading && !profile) {
@@ -422,7 +419,7 @@ export default function ProfilePage() {
             {profile?.lastProfileUpdateAt && (
               <span className="text-[10px] text-[var(--text-muted)] flex items-center gap-1">
                 <Clock className="w-3 h-3" />
-                Updated {new Date(profile.lastProfileUpdateAt).toLocaleDateString()}
+                Updated {formatDate(profile.lastProfileUpdateAt)}
               </span>
             )}
           </div>

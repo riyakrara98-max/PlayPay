@@ -20,7 +20,7 @@ import {
   Calendar,
 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, limit } from 'firebase/firestore';
-import { getFirebaseDb, isFirebaseConfigured } from '@/firebase/config';
+import { getFirebaseDb } from '@/firebase/config';
 import { AdminActivityDocument, FIRESTORE_COLLECTIONS } from '@/types/firestore';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
@@ -32,6 +32,20 @@ import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
+import { formatDate, formatDateTime } from '@/utils/formatters';
+import { safeSerializeValue } from '@/lib/audit-logger';
+
+const renderSafeJson = (val: unknown, space?: number): string => {
+  if (val === undefined) return 'undefined';
+  if (val === null) return 'null';
+  if (typeof val === 'string') return val;
+  if (typeof val === 'number' || typeof val === 'boolean') return String(val);
+  try {
+    return JSON.stringify(safeSerializeValue(val), null, space);
+  } catch {
+    return String(val);
+  }
+};
 
 export default function AdminAuditPage() {
   const [logs, setLogs] = useState<AdminActivityDocument[]>([]);
@@ -47,11 +61,6 @@ export default function AdminAuditPage() {
 
   // Realtime subscription to adminActivity collection
   useEffect(() => {
-    if (!isFirebaseConfigured()) {
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     setError(null);
 
@@ -137,22 +146,6 @@ export default function AdminAuditPage() {
 
     return result;
   }, [logs, searchQuery, actionFilter, targetTypeFilter, dateRangeFilter]);
-
-  const formatDate = (isoString?: string | null) => {
-    if (!isoString) return 'N/A';
-    try {
-      return new Date(isoString).toLocaleString('en-IN', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      });
-    } catch {
-      return isoString;
-    }
-  };
 
   const getActionBadgeVariant = (action: string) => {
     const act = action.toLowerCase();
@@ -281,7 +274,7 @@ export default function AdminAuditPage() {
 
                     <span className="text-[11px] font-mono text-[var(--text-secondary)] flex items-center gap-1 shrink-0">
                       <Clock className="w-3 h-3 text-[var(--text-secondary)]" />
-                      {formatDate(log.createdAt || log.timestamp)}
+                      {formatDateTime(log.createdAt || log.timestamp)}
                     </span>
                   </div>
 
@@ -343,10 +336,10 @@ export default function AdminAuditPage() {
                                     <div key={key} className="grid grid-cols-1 sm:grid-cols-3 gap-1 bg-[var(--card)] p-2 rounded border border-[var(--border)]">
                                       <span className="font-bold text-[var(--brand)]">{key}:</span>
                                       <span className="text-rose-500 line-through truncate">
-                                        Old: {JSON.stringify(oldVal)}
+                                        Old: {renderSafeJson(oldVal)}
                                       </span>
                                       <span className="text-emerald-500 font-semibold truncate">
-                                        New: {JSON.stringify(newVal)}
+                                        New: {renderSafeJson(newVal)}
                                       </span>
                                     </div>
                                   );
@@ -361,7 +354,7 @@ export default function AdminAuditPage() {
                                 <div className="p-2.5 rounded-lg bg-[var(--bg-muted)] border border-[var(--border)] overflow-x-auto">
                                   <span className="font-bold text-rose-500 block mb-1">Before:</span>
                                   <pre className="text-[var(--text-secondary)] whitespace-pre-wrap">
-                                    {JSON.stringify(log.before, null, 2)}
+                                    {renderSafeJson(log.before, 2)}
                                   </pre>
                                 </div>
                               )}
@@ -369,7 +362,7 @@ export default function AdminAuditPage() {
                                 <div className="p-2.5 rounded-lg bg-[var(--bg-muted)] border border-[var(--border)] overflow-x-auto">
                                   <span className="font-bold text-emerald-500 block mb-1">After:</span>
                                   <pre className="text-[var(--text-secondary)] whitespace-pre-wrap">
-                                    {JSON.stringify(log.after, null, 2)}
+                                    {renderSafeJson(log.after, 2)}
                                   </pre>
                                 </div>
                               )}

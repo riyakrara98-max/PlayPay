@@ -6,10 +6,11 @@ import {
   doc,
   onSnapshot,
   query,
+  where,
   orderBy,
   limit,
 } from 'firebase/firestore';
-import { getFirebaseDb, isFirebaseConfigured } from '@/firebase/config';
+import { getFirebaseDb } from '@/firebase/config';
 import {
   UserDocument,
   TaskDocument,
@@ -18,6 +19,7 @@ import {
   FIRESTORE_COLLECTIONS,
 } from '@/types/firestore';
 import { useAuth } from '@/hooks/useAuth';
+import { getSafeTime } from '@/utils/formatters';
 
 export interface AdminStats {
   totalUsers: number;
@@ -86,7 +88,7 @@ export function useAdminDashboardData(): AdminDashboardData {
   }, []);
 
   useEffect(() => {
-    if (!isAdmin || !isFirebaseConfigured()) {
+    if (!isAdmin) {
       queueMicrotask(() => {
         setLoading(false);
       });
@@ -116,19 +118,13 @@ export function useAdminDashboardData(): AdminDashboardData {
         }
       );
 
-      // 2. Listen to Tasks collection
+      // 2. Listen to Active Tasks collection
       const tasksCol = collection(db, FIRESTORE_COLLECTIONS.TASKS);
+      const activeTasksQuery = query(tasksCol, where('status', '==', 'active'));
       unsubTasks = onSnapshot(
-        tasksCol,
+        activeTasksQuery,
         (snap) => {
-          let activeCount = 0;
-          snap.docs.forEach((docSnap) => {
-            const data = docSnap.data() as TaskDocument;
-            if (data.status === 'active') {
-              activeCount++;
-            }
-          });
-          setStats((prev) => ({ ...prev, activeTasks: activeCount }));
+          setStats((prev) => ({ ...prev, activeTasks: snap.size }));
         },
         (err) => {
           console.error('[Admin Dashboard] Tasks snapshot error:', err);
@@ -166,7 +162,7 @@ export function useAdminDashboardData(): AdminDashboardData {
 
             // Today's Enrollments
             if (data.enrolledAt) {
-              const enrolledTime = new Date(data.enrolledAt).getTime();
+              const enrolledTime = getSafeTime(data.enrolledAt);
               if (!isNaN(enrolledTime) && enrolledTime >= startOfToday) {
                 todayCount++;
               }

@@ -30,7 +30,7 @@ export function PageContainer({
       className={cn(
         'w-full mx-auto transition-all',
         sizeClasses[size],
-        padded && 'px-4 sm:px-6 lg:px-8 py-4 sm:py-6',
+        padded && 'px-4 md:px-6 lg:px-8 py-6 md:py-8',
         className
       )}
       {...props}

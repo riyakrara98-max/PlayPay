@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   Smartphone,
   CheckCircle2,
@@ -15,8 +15,14 @@ import {
   ArrowRight,
   Receipt,
   RotateCcw,
+  Lock,
 } from 'lucide-react';
-import { EnrollmentDocument } from '@/types/firestore';
+import { EnrollmentDocument, TaskDocument, FIRESTORE_COLLECTIONS } from '@/types/firestore';
+import { useAuthContext } from '@/contexts/AuthContext';
+import { formatDate } from '@/utils/formatters';
+import { useRealtimeDocument } from '@/hooks/useRealtimeDocument';
+import { isTaskExpired } from '@/lib/taskAvailability';
+import { resolveMemberReward } from '@/lib/rewardResolver';
 
 interface MyTaskCardProps {
   enrollment: EnrollmentDocument;
@@ -24,30 +30,42 @@ interface MyTaskCardProps {
 
 export function MyTaskCard({ enrollment }: MyTaskCardProps) {
   const [isRejectionExpanded, setIsRejectionExpanded] = useState(false);
+  const { userProfile } = useAuthContext();
+
+  const { data: task } = useRealtimeDocument<TaskDocument>(
+    FIRESTORE_COLLECTIONS.TASKS,
+    enrollment.taskId
+  );
+
+  const resolvedReward = resolveMemberReward(
+    enrollment.rewardAmount || enrollment.reward || 0,
+    userProfile?.effectiveReward
+  );
+
+  const isExpired = isTaskExpired((task || enrollment) as unknown as TaskDocument);
 
   const isApproved = enrollment.status === 'approved';
   const isRejected = enrollment.status === 'rejected';
   const isSubmitted = Boolean(enrollment.submittedAt) && enrollment.status === 'pending';
   const isEnrolledOnly = enrollment.status === 'pending' && !enrollment.submittedAt;
 
+  const isExpiredUnsubmitted = isEnrolledOnly && isExpired;
+  const isExpiredRejected = isRejected && isExpired;
+
   const paymentStatus = enrollment.paymentStatus || 'pending';
 
   // Format dates nicely
-  const formatDate = (dateStr?: string | null) => {
+  const formatDateStr = (dateStr?: string | null) => {
     if (!dateStr) return null;
     try {
-      return new Date(dateStr).toLocaleDateString('en-IN', {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      });
+      return formatDate(dateStr);
     } catch {
       return null;
     }
   };
 
-  const enrolledDateFormatted = formatDate(enrollment.enrolledAt);
-  const approvedDateFormatted = formatDate(enrollment.reviewedAt);
+  const enrolledDateFormatted = formatDateStr(enrollment.enrolledAt);
+  const approvedDateFormatted = formatDateStr(enrollment.reviewedAt);
 
   // Status Badge Configuration
   const getStatusBadge = () => {
@@ -56,6 +74,14 @@ export function MyTaskCard({ enrollment }: MyTaskCardProps) {
         <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-[var(--success)]/10 text-[var(--success)] border border-[var(--success)]/20 shadow-2xs">
           <CheckCircle2 className="w-3.5 h-3.5" />
           Approved
+        </span>
+      );
+    }
+    if (isExpiredRejected || isExpiredUnsubmitted) {
+      return (
+        <span className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full bg-[var(--danger)]/10 text-[var(--danger)] border border-[var(--danger)]/20 shadow-2xs">
+          <AlertCircle className="w-3.5 h-3.5" />
+          Expired
         </span>
       );
     }
@@ -85,6 +111,8 @@ export function MyTaskCard({ enrollment }: MyTaskCardProps) {
 
   // Payment Status Chip Configuration
   const getPaymentStatusChip = () => {
+    if (!isApproved) return null;
+
     switch (paymentStatus) {
       case 'paid':
         return (
@@ -126,31 +154,47 @@ export function MyTaskCard({ enrollment }: MyTaskCardProps) {
 
   // Action Button config
   const getActionButton = () => {
+    if (isExpiredRejected || isExpiredUnsubmitted) {
+      return {
+        label: 'Task Expired',
+        icon: Lock,
+        variant:
+          'bg-[var(--surface-elevated)] text-[var(--text-muted)] border border-[var(--border)] cursor-not-allowed opacity-70',
+        disabled: true,
+      };
+    }
     if (isRejected) {
       return {
         label: 'Resubmit Proof',
         icon: RotateCcw,
         variant: 'bg-[var(--danger)] hover:bg-[var(--danger)]/90 text-white',
+        disabled: false,
       };
     }
     if (isApproved) {
       return {
         label: 'View Details',
         icon: ArrowRight,
-        variant: 'bg-[var(--surface-elevated)] hover:bg-[var(--primary)] hover:text-[var(--primary-fg)] text-[var(--text-primary)] border border-[var(--border)]',
+        variant:
+          'bg-[var(--surface-elevated)] hover:bg-[var(--primary)] hover:text-[var(--primary-fg)] text-[var(--text-primary)] border border-[var(--border)]',
+        disabled: false,
       };
     }
     if (isSubmitted) {
       return {
         label: 'Under Review',
         icon: Clock,
-        variant: 'bg-[var(--surface-elevated)] hover:bg-[var(--surface)] text-[var(--text-secondary)] border border-[var(--border)]',
+        variant:
+          'bg-[var(--surface-elevated)] hover:bg-[var(--surface)] text-[var(--text-secondary)] border border-[var(--border)]',
+        disabled: false,
       };
     }
     return {
       label: 'Continue Task',
       icon: ArrowRight,
-      variant: 'bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-[var(--primary-fg)] shadow-xs',
+      variant:
+        'bg-[var(--primary)] hover:bg-[var(--primary-hover)] text-[var(--primary-fg)] shadow-xs',
+      disabled: false,
     };
   };
 
@@ -225,8 +269,7 @@ export function MyTaskCard({ enrollment }: MyTaskCardProps) {
                 Reward
               </span>
               <span className="font-extrabold text-[var(--primary)] font-mono flex items-center gap-0.5">
-                <Coins className="w-3.5 h-3.5" /> ₹
-                {enrollment.rewardAmount || enrollment.reward || 0}
+                <Coins className="w-3.5 h-3.5" /> ₹{resolvedReward}
               </span>
             </div>
           )}
@@ -237,7 +280,7 @@ export function MyTaskCard({ enrollment }: MyTaskCardProps) {
           <div className="flex items-center justify-between px-1 text-xs">
             <span className="text-[var(--text-muted)] font-medium">Earned Reward</span>
             <span className="text-base font-extrabold text-[var(--primary)] font-mono flex items-center gap-1">
-              <Coins className="w-4 h-4" /> ₹{enrollment.rewardAmount || enrollment.reward || 0}
+              <Coins className="w-4 h-4" /> ₹{resolvedReward}
             </span>
           </div>
         )}
@@ -282,25 +325,43 @@ export function MyTaskCard({ enrollment }: MyTaskCardProps) {
       </div>
 
       {/* Action Footer */}
-      <div className="mt-5 pt-3 border-t border-[var(--border)] flex items-center gap-2">
-        <Link
-          href={`/my-tasks/${enrollment.id}`}
-          className={`w-full py-2.5 px-4 font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-all ${action.variant}`}
-        >
-          <span>{action.label}</span>
-          <ActionIcon className="w-3.5 h-3.5" />
-        </Link>
+      <div className="mt-5 pt-3 border-t border-[var(--border)] flex flex-col gap-2">
+        <div className="flex items-center gap-2 w-full">
+          {action.disabled ? (
+            <div
+              className={`w-full py-2.5 px-4 font-semibold text-xs rounded-xl flex items-center justify-center gap-2 ${action.variant}`}
+            >
+              <span>{action.label}</span>
+              <ActionIcon className="w-3.5 h-3.5" />
+            </div>
+          ) : (
+            <Link
+              href={`/my-tasks/${enrollment.id}`}
+              className={`w-full py-2.5 px-4 font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-all ${action.variant}`}
+            >
+              <span>{action.label}</span>
+              <ActionIcon className="w-3.5 h-3.5" />
+            </Link>
+          )}
 
-        {isApproved && (
-          <Link
-            href="/payment"
-            title="Request Payment"
-            className="p-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center justify-center transition-colors shrink-0"
-          >
-            <Receipt className="w-4 h-4" />
-          </Link>
+          {isApproved && (
+            <Link
+              href="/payment"
+              title="Request Payment"
+              className="p-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center justify-center transition-colors shrink-0"
+            >
+              <Receipt className="w-4 h-4" />
+            </Link>
+          )}
+        </div>
+
+        {(isExpiredRejected || isExpiredUnsubmitted) && (
+          <p className="text-[11px] text-[var(--text-muted)] font-medium text-center">
+            Submission deadline has passed.
+          </p>
         )}
       </div>
     </motion.div>
   );
 }
+

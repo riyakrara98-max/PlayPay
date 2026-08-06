@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import {
   Smartphone,
   CheckCircle2,
@@ -15,6 +15,7 @@ import {
   CheckCheck,
 } from 'lucide-react';
 import { EnrollmentDocument } from '@/types/firestore';
+import { getSafeTime, formatDate } from '@/utils/formatters';
 
 interface PaymentCardProps {
   enrollment: EnrollmentDocument;
@@ -46,16 +47,12 @@ export function PaymentCard({
 
   // Calculate Days Since Completion/Approval safely
   const { daysSinceCompletion, isEligible, daysRemaining, formattedApprovedDate } = React.useMemo(() => {
-    const approvedTime = approvedDateStr ? new Date(approvedDateStr).getTime() : currentTime;
+    const approvedTime = approvedDateStr ? getSafeTime(approvedDateStr) : currentTime;
     const diffTime = Math.max(0, currentTime - approvedTime);
     const days = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     const eligible = days >= paymentEligibilityDays;
     const remaining = Math.max(0, paymentEligibilityDays - days);
-    const formattedDate = new Date(approvedTime).toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
+    const formattedDate = formatDate(approvedTime);
     return {
       daysSinceCompletion: days,
       isEligible: eligible,

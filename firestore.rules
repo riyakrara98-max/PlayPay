@@ -21,8 +21,27 @@ service cloud.firestore {
         getUserData().role == 'admin';
     }
 
+    function isTeamLeader() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        (getUserData().memberType == 'team_leader' || getUserData().role == 'team_leader');
+    }
+
     function isValidId(id) {
       return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isCloudinaryUrl(url) {
+      return url is string &&
+        url.size() > 0 &&
+        url.size() <= 1024 &&
+        url.matches('^https://res\\.cloudinary\\.com/[a-zA-Z0-9_\\-]+/.*$');
+    }
+
+    function isValidCloudinaryMetadata(meta) {
+      return meta is map &&
+        meta.public_id is string && meta.public_id.size() > 0 && meta.public_id.size() <= 256 &&
+        meta.secure_url is string && isCloudinaryUrl(meta.secure_url);
     }
 
     // Default catch-all security net
@@ -32,8 +51,8 @@ service cloud.firestore {
 
     // Users Collection
     match /users/{userId} {
-      allow get: if isOwner(userId) || isAdmin();
-      allow list: if isAdmin();
+      allow get: if isOwner(userId) || isAdmin() || (isTeamLeader() && resource.data.leaderId == request.auth.uid);
+      allow list: if isAdmin() || (isTeamLeader() && resource.data.leaderId == request.auth.uid);
       allow create: if isOwner(userId) &&
         request.resource.data.uid == userId &&
         request.resource.data.role == 'user';
@@ -44,44 +63,91 @@ service cloud.firestore {
         request.resource.data.role == resource.data.role
       ) && (
         isAdmin() || (
-          isOwner(userId) &&
-          request.resource.data.isBanned == resource.data.isBanned &&
-          request.resource.data.isActive == resource.data.isActive
+          isOwner(userId) && (
+            // Standard Profile Updates
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'displayName', 'photoURL', 'phoneNumber', 'upiId', 'bankName',
+              'accountHolder', 'accountNumber', 'ifscCode', 'preferredLanguage',
+              'theme', 'notificationPreferences', 'lastProfileUpdateAt'
+            ]) ||
+            // One-time Onboarding Updates
+            (
+              (!('profileCompleted' in resource.data) || resource.data.profileCompleted == false) &&
+              request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                'memberType', 'leaderId', 'leaderCode', 'profileCompleted',
+                'displayName', 'photoURL', 'phoneNumber', 'upiId', 'bankName',
+                'accountHolder', 'accountNumber', 'ifscCode', 'preferredLanguage',
+                'theme', 'notificationPreferences', 'lastProfileUpdateAt'
+              ]) &&
+              request.resource.data.memberType in ['team_member', 'pending'] &&
+              request.resource.data.profileCompleted == true
+            )
+          )
         )
       );
       allow delete: if isAdmin();
     }
 
+    // Leader Codes Mapping Collection
+    match /leaderCodes/{code} {
+      allow get: if isSignedIn();
+      allow list, create, update, delete: if isAdmin();
+    }
+
     // Tasks Collection
     match /tasks/{taskId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'enrolledCount', 'currentSubmissions', 'updatedAt'
+        ])
+      );
     }
 
     // Enrollments Collection
     match /enrollments/{enrollmentId} {
-      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || (isTeamLeader() && resource.data.leaderId == request.auth.uid) || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || (isTeamLeader() && resource.data.leaderId == request.auth.uid) || isAdmin());
       allow create: if isSignedIn() &&
         request.resource.data.userId == request.auth.uid &&
-        request.resource.data.status == 'pending';
+        request.resource.data.status == 'pending' &&
+        request.resource.data.paymentStatus == 'pending' &&
+        (!('screenshotUrl' in request.resource.data) || request.resource.data.screenshotUrl == '' || request.resource.data.screenshotUrl == null || isCloudinaryUrl(request.resource.data.screenshotUrl));
       allow update: if isAdmin() || (
         isSignedIn() &&
         resource.data.userId == request.auth.uid &&
         request.resource.data.userId == resource.data.userId &&
         request.resource.data.taskId == resource.data.taskId &&
         request.resource.data.enrolledAt == resource.data.enrolledAt &&
+        request.resource.data.reward == resource.data.reward &&
+        request.resource.data.rewardAmount == resource.data.rewardAmount &&
         (
           // Case 1: Submission / Resubmission update
           (
             (resource.data.status == 'pending' || resource.data.status == 'rejected') &&
-            request.resource.data.status == 'pending'
+            request.resource.data.status == 'pending' &&
+            request.resource.data.paymentStatus == resource.data.paymentStatus &&
+            isCloudinaryUrl(request.resource.data.screenshotUrl) &&
+            (!('proofUrl' in request.resource.data) || isCloudinaryUrl(request.resource.data.proofUrl)) &&
+            (!('cloudinaryMetadata' in request.resource.data) || request.resource.data.cloudinaryMetadata == null || isValidCloudinaryMetadata(request.resource.data.cloudinaryMetadata)) &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'status', 'submittedAt', 'screenshotUrl', 'proofUrl', 'userComment',
+              'submissionVersion', 'lastUpdatedAt', 'lastUpdatedBy', 'rejectionReason',
+              'cloudinaryMetadata'
+            ])
           ) ||
           // Case 2: Payment request update on approved enrollment
           (
             resource.data.status == 'approved' &&
             request.resource.data.status == 'approved' &&
-            request.resource.data.paymentStatus == 'requested'
+            resource.data.paymentStatus == 'pending' &&
+            request.resource.data.paymentStatus == 'requested' &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'paymentStatus', 'paymentRequestedAt', 'lastWhatsAppRequestAt',
+              'whatsAppRequestCount', 'lastUpdatedAt', 'lastUpdatedBy'
+            ])
           )
         )
       );
@@ -94,10 +160,42 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Debug / Connection Test Collection
+    match /debug/{debugId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Leader Task Assignments Collection (Phase 7A, 7A.1 & 7A.2)
+    match /leaderTaskAssignments/{assignmentId} {
+      allow read: if isAdmin() || (
+        isSignedIn() && request.auth.uid == resource.data.leaderId
+      );
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        isSignedIn() &&
+        request.auth.uid == resource.data.leaderId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'leaderReward',
+          'rewardConfiguredAt',
+          'rewardConfiguredBy',
+          'updatedAt'
+        ])
+      );
+    }
+
     // Admin Activity Audit Log Collection
     match /adminActivity/{activityId} {
       allow read: if isAdmin();
-      allow write: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    // Audit Logs Alias Collection
+    match /audit_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
     }
   }
 }
+

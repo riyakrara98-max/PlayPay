@@ -1,11 +1,46 @@
 /**
- * Formats an ISO string or Date into a human-readable date string.
+ * Helper to convert various date inputs (ISO string, Date, Timestamp) to Date object.
  */
-export function formatDate(dateInput: string | Date | number | undefined | null): string {
-  if (!dateInput) return 'N/A';
-  try {
+export function parseDateInput(dateInput: unknown): Date | null {
+  if (dateInput === null || dateInput === undefined) return null;
+  if (dateInput instanceof Date) {
+    return isNaN(dateInput.getTime()) ? null : dateInput;
+  }
+  if (typeof dateInput === 'number') {
     const date = new Date(dateInput);
-    if (isNaN(date.getTime())) return 'N/A';
+    return isNaN(date.getTime()) ? null : date;
+  }
+  if (typeof dateInput === 'object') {
+    const obj = dateInput as Record<string, unknown>;
+    if (typeof obj.toDate === 'function') {
+      try {
+        const d = (obj.toDate as () => Date)();
+        if (d instanceof Date && !isNaN(d.getTime())) return d;
+      } catch {
+        // fallback
+      }
+    }
+    if (typeof obj.seconds === 'number') {
+      return new Date(obj.seconds * 1000);
+    }
+    if (typeof obj._seconds === 'number') {
+      return new Date((obj._seconds as number) * 1000);
+    }
+  }
+  if (typeof dateInput === 'string') {
+    const date = new Date(dateInput);
+    if (!isNaN(date.getTime())) return date;
+  }
+  return null;
+}
+
+/**
+ * Formats an ISO string, Date, or Firestore Timestamp into a human-readable date string.
+ */
+export function formatDate(dateInput: unknown): string {
+  const date = parseDateInput(dateInput);
+  if (!date) return 'N/A';
+  try {
     return new Intl.DateTimeFormat('en-IN', {
       year: 'numeric',
       month: 'short',
@@ -17,13 +52,12 @@ export function formatDate(dateInput: string | Date | number | undefined | null)
 }
 
 /**
- * Formats an ISO string or Date into a full date and time string.
+ * Formats an ISO string, Date, or Firestore Timestamp into a full date and time string.
  */
-export function formatDateTime(dateInput: string | Date | number | undefined | null): string {
-  if (!dateInput) return 'N/A';
+export function formatDateTime(dateInput: unknown): string {
+  const date = parseDateInput(dateInput);
+  if (!date) return 'N/A';
   try {
-    const date = new Date(dateInput);
-    if (isNaN(date.getTime())) return 'N/A';
     return new Intl.DateTimeFormat('en-IN', {
       year: 'numeric',
       month: 'short',
@@ -40,11 +74,10 @@ export function formatDateTime(dateInput: string | Date | number | undefined | n
 /**
  * Returns a relative time string (e.g. "5 minutes ago", "2 days ago").
  */
-export function formatRelativeTime(dateInput: string | Date | number | undefined | null): string {
-  if (!dateInput) return 'N/A';
+export function formatRelativeTime(dateInput: unknown): string {
+  const date = parseDateInput(dateInput);
+  if (!date) return 'N/A';
   try {
-    const date = new Date(dateInput);
-    if (isNaN(date.getTime())) return 'N/A';
     const now = new Date();
     const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
@@ -67,4 +100,12 @@ export function formatCurrency(amount: number): string {
     currency: 'INR',
     maximumFractionDigits: 2,
   }).format(amount);
+}
+
+/**
+ * Returns safe timestamp (ms) or 0 if invalid.
+ */
+export function getSafeTime(dateInput: unknown): number {
+  const date = parseDateInput(dateInput);
+  return date ? date.getTime() : 0;
 }

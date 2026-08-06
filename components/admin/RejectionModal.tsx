@@ -12,6 +12,8 @@ interface RejectionModalProps {
   onClose: () => void;
   submission: EnrollmentDocument | null;
   onConfirmReject: (reason: string) => Promise<void>;
+  predefinedReasons?: string;
+  isSubmitting?: boolean;
 }
 
 export function RejectionModal({
@@ -19,6 +21,8 @@ export function RejectionModal({
   onClose,
   submission,
   onConfirmReject,
+  predefinedReasons = '',
+  isSubmitting: externalIsSubmitting = false,
 }: RejectionModalProps) {
   const [reason, setReason] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -61,6 +65,7 @@ export function RejectionModal({
 
   if (!submission) return null;
 
+  const reasonsList = (predefinedReasons || '').split('\n').filter(Boolean);
   const charCount = reason.trim().length;
   const isValid = charCount >= 10;
 
@@ -106,6 +111,26 @@ export function RejectionModal({
             disabled={isSubmitting}
             autoFocus
           />
+          {reasonsList.length > 0 && (
+            <div className="mt-2 space-y-1">
+              <span className="text-[11px] font-medium text-[var(--text-secondary)]">Quick Reasons:</span>
+              <div className="flex flex-wrap gap-1.5">
+                {reasonsList.map((r, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      setReason(r);
+                      if (error) setError(null);
+                    }}
+                    className="px-2 py-1 text-[11px] rounded border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-secondary)] hover:bg-[var(--surface-hover)] transition-colors text-left"
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between mt-1 text-[11px]">
             <span className={isValid ? 'text-emerald-500 font-medium' : 'text-[var(--text-muted)]'}>
               {charCount}/10 chars minimum

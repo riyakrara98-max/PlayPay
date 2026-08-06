@@ -11,6 +11,7 @@ import {
   User,
   LogOut,
   ShieldAlert,
+  ShieldCheck,
   ChevronDown,
   LayoutDashboard,
   CheckSquare,
@@ -34,12 +35,19 @@ export function TopNav() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const isAdmin = userProfile?.role === 'admin';
+  const isTeamLeader = userProfile?.memberType === 'team_leader' || userProfile?.role === 'team_leader';
 
   const navLinks = [
     { href: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
     { href: '/my-tasks', label: 'My Tasks', icon: <CheckSquare className="w-4 h-4" /> },
     { href: '/payment', label: 'Payment', icon: <CreditCard className="w-4 h-4" /> },
     { href: '/profile', label: 'Profile', icon: <User className="w-4 h-4" /> },
+  ];
+  
+  const publicNavLinks = [
+    { href: '/', label: 'Home' },
+    { href: '/#tasks-section', label: 'Tasks' },
+    { href: '/#how-it-works', label: 'How it Works' },
   ];
 
   const handleLogout = async () => {
@@ -62,12 +70,22 @@ export function TopNav() {
               icon: <User className="w-4 h-4" />,
               onClick: () => router.push('/profile'),
             },
+            ...(isTeamLeader
+              ? [
+                  {
+                    id: 'team-leader',
+                    label: 'Team Leader Portal',
+                    icon: <ShieldCheck className="w-4 h-4 text-[var(--success)]" />,
+                    onClick: () => router.push('/team-leader'),
+                  },
+                ]
+              : []),
             ...(isAdmin
               ? [
                   {
                     id: 'admin',
                     label: 'Admin Control Center',
-                    icon: <ShieldAlert className="w-4 h-4 text-amber-500" />,
+                    icon: <ShieldAlert className="w-4 h-4 text-[var(--warning)]" />,
                     onClick: () => router.push('/admin/dashboard'),
                   },
                 ]
@@ -104,6 +122,11 @@ export function TopNav() {
               <span className="text-base font-extrabold font-heading text-[var(--text-primary)] tracking-tight">
                 PlayPay
               </span>
+              {isTeamLeader && !isAdmin && (
+                <Badge variant="success" size="sm">
+                  Team Leader
+                </Badge>
+              )}
               {isAdmin && (
                 <Badge variant="accent" size="sm">
                   Admin
@@ -113,9 +136,8 @@ export function TopNav() {
           </Link>
 
           {/* Desktop Links */}
-          {currentUser && (
-            <nav className="hidden md:flex items-center gap-1">
-              {navLinks.map((link) => {
+          <nav className="hidden md:flex items-center gap-1">
+              {currentUser ? navLinks.map((link) => {
                 const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`);
                 return (
                   <Link
@@ -132,9 +154,24 @@ export function TopNav() {
                     <span>{link.label}</span>
                   </Link>
                 );
+              }) : publicNavLinks.map((link) => {
+                const isActive = pathname === link.href;
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    className={cn(
+                      'flex items-center gap-2 px-4 py-2 text-sm font-bold rounded-xl transition-all duration-300',
+                      isActive
+                        ? 'text-[var(--primary)]'
+                        : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-elevated)]'
+                    )}
+                  >
+                    <span>{link.label}</span>
+                  </Link>
+                );
               })}
             </nav>
-          )}
 
           {/* Action Area */}
           <div className="flex items-center gap-2">
@@ -152,6 +189,21 @@ export function TopNav() {
               size="md"
               onClick={toggleTheme}
             />
+
+            {/* Switch to Team Leader Portal (Desktop) */}
+            {currentUser && isTeamLeader && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="hidden sm:inline-flex items-center gap-1.5 border-[var(--success)]/30 text-[var(--success)] hover:bg-[var(--success)]/10 font-bold"
+                asChild
+              >
+                <Link href="/team-leader">
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Team Leader Portal</span>
+                </Link>
+              </Button>
+            )}
 
             {/* Profile Dropdown / Sign In Trigger */}
             {currentUser ? (
@@ -183,8 +235,7 @@ export function TopNav() {
             )}
 
             {/* Mobile Hamburger Menu Drawer Toggle */}
-            {currentUser && (
-              <div className="md:hidden">
+            <div className="md:hidden">
                 <IconButton
                   icon={<Menu className="w-5 h-5" />}
                   aria-label="Open mobile navigation menu"
@@ -193,7 +244,6 @@ export function TopNav() {
                   onClick={() => setMobileMenuOpen(true)}
                 />
               </div>
-            )}
           </div>
         </div>
       </header>
@@ -207,7 +257,7 @@ export function TopNav() {
         size="sm"
       >
         <div className="flex flex-col gap-2 py-2">
-          {navLinks.map((link) => {
+          {currentUser ? navLinks.map((link) => {
             const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`);
             return (
               <Link
@@ -225,13 +275,41 @@ export function TopNav() {
                 <span>{link.label}</span>
               </Link>
             );
+          }) : publicNavLinks.map((link) => {
+            const isActive = pathname === link.href;
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setMobileMenuOpen(false)}
+                className={cn(
+                  'flex items-center gap-3 w-full px-4 py-3 text-sm font-bold rounded-xl transition-colors min-h-[44px]',
+                  isActive
+                    ? 'bg-[var(--primary)]/10 text-[var(--primary)]'
+                    : 'text-[var(--text-primary)] hover:bg-[var(--surface-elevated)]'
+                )}
+              >
+                <span>{link.label}</span>
+              </Link>
+            );
           })}
+
+          {isTeamLeader && (
+            <Link
+              href="/team-leader"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-3 w-full px-4 py-3 text-sm font-semibold rounded-[var(--radius-md)] text-[var(--success)] bg-[var(--success)]/10 transition-colors min-h-[44px]"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span>Team Leader Portal</span>
+            </Link>
+          )}
 
           {isAdmin && (
             <Link
               href="/admin/dashboard"
               onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center gap-3 w-full px-4 py-3 text-sm font-semibold rounded-[var(--radius-md)] text-amber-600 dark:text-amber-400 bg-amber-500/10 transition-colors min-h-[44px]"
+              className="flex items-center gap-3 w-full px-4 py-3 text-sm font-semibold rounded-[var(--radius-md)] text-[var(--warning)] bg-[var(--warning)]/10 transition-colors min-h-[44px]"
             >
               <ShieldAlert className="w-4 h-4" />
               <span>Admin CMS</span>

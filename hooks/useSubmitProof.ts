@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useCallback, useRef } from 'react';
-import { doc, runTransaction } from 'firebase/firestore';
-import { getFirebaseDb, isFirebaseConfigured } from '@/firebase/config';
+import { doc, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { getFirebaseDb } from '@/firebase/config';
 import { FIRESTORE_COLLECTIONS, EnrollmentDocument, CloudinaryMetadata } from '@/types/firestore';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { isCloudinarySecureUrl, validateCloudinaryMetadata } from '@/utils/cloudinary';
 
 export interface SubmitProofParams {
   enrollmentId: string;
@@ -36,6 +37,15 @@ export function useSubmitProof() {
     }: SubmitProofParams): Promise<boolean> => {
       setSubmitError(null);
 
+      console.log('[SubmitProof] Uploaded object before validation:', {
+        enrollmentId,
+        screenshotUrl,
+        userComment,
+        cloudinaryMetadata,
+        publicIdToRollback,
+        isResubmission,
+      });
+
       // Rule 8 — Double Click Protection Guard
       if (submitInFlightRef.current) {
         console.warn('[SubmitProof] Submission request already in progress.');
@@ -54,19 +64,10 @@ export function useSubmitProof() {
         return false;
       }
 
-      if (!isFirebaseConfigured()) {
-        const msg = 'Firestore database is not configured.';
-        setSubmitError(msg);
-        toast({
-          title: 'Configuration Error',
-          message: msg,
-          variant: 'error',
-        });
-        return false;
-      }
-
       // Rule 1 — Cloudinary Upload Verification Guard
-      if (!screenshotUrl || typeof screenshotUrl !== 'string' || !screenshotUrl.startsWith('https://')) {
+      const isValidUrl = isCloudinarySecureUrl(screenshotUrl);
+
+      if (!isValidUrl) {
         const msg = 'Valid Cloudinary HTTPS screenshot proof is required before submitting.';
         setSubmitError(msg);
         toast({
@@ -112,25 +113,26 @@ export function useSubmitProof() {
           const currentVersion = existingData.submissionVersion || 1;
           const nextVersion = isResubmission || existingData.status === 'rejected' ? currentVersion + 1 : currentVersion;
 
-          const now = new Date().toISOString();
-
           // Rule 5, 6, 11 & 12 — Atomic Update Payload (Only User-Allowed Fields)
           // Preserves immutable fields: userId, taskId, reward, assignedComment, commentIndex, enrolledAt, taskTitle, appName
           // Does NOT write admin fields: reviewedAt, reviewedBy, paymentStatus
           const updatePayload: Record<string, unknown> = {
             status: 'pending', // Re-enter pending review status
-            submittedAt: now,
+            submittedAt: serverTimestamp(),
             screenshotUrl,
             proofUrl: screenshotUrl,
             userComment: userComment.trim(),
             submissionVersion: nextVersion,
-            lastUpdatedAt: now,
+            lastUpdatedAt: serverTimestamp(),
             lastUpdatedBy: currentUser.uid,
             rejectionReason: '', // Clear previous rejection reason
           };
 
           if (cloudinaryMetadata) {
-            updatePayload.cloudinaryMetadata = cloudinaryMetadata;
+            const validatedMeta = validateCloudinaryMetadata(cloudinaryMetadata, screenshotUrl);
+            if (validatedMeta) {
+              updatePayload.cloudinaryMetadata = validatedMeta;
+            }
           }
 
           transaction.update(enrollmentRef, updatePayload);

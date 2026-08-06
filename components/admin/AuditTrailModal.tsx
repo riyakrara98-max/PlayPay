@@ -15,6 +15,7 @@ import {
 import { Modal } from '@/components/ui/modal';
 import { Badge } from '@/components/ui/badge';
 import { EnrollmentDocument } from '@/types/firestore';
+import { formatDateTime } from '@/utils/formatters';
 
 interface AuditTrailModalProps {
   isOpen: boolean;
@@ -28,23 +29,6 @@ export function AuditTrailModal({
   submission,
 }: AuditTrailModalProps) {
   if (!submission) return null;
-
-  const formatDate = (dateStr?: string | null) => {
-    if (!dateStr) return '—';
-    try {
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return dateStr;
-      return d.toLocaleString('en-IN', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    } catch {
-      return dateStr;
-    }
-  };
 
   return (
     <Modal
@@ -128,7 +112,7 @@ export function AuditTrailModal({
                 <Badge variant="primary" size="sm">Version v{submission.submissionVersion || 1}</Badge>
               </div>
               <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                Timestamp: <span className="font-mono">{formatDate(submission.submittedAt || submission.enrolledAt)}</span>
+                Timestamp: <span className="font-mono">{formatDateTime(submission.submittedAt || submission.enrolledAt)}</span>
               </p>
               {submission.userComment && (
                 <p className="mt-1 text-xs text-[var(--text-muted)] bg-[var(--surface-elevated)] p-2 rounded border border-[var(--border)] italic">
@@ -164,7 +148,7 @@ export function AuditTrailModal({
                   </Badge>
                 </div>
                 <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                  Reviewed At: <span className="font-mono">{formatDate(submission.reviewedAt || submission.approvedAt)}</span>
+                  Reviewed At: <span className="font-mono">{formatDateTime(submission.reviewedAt || submission.approvedAt)}</span>
                 </p>
                 {submission.reviewedBy && (
                   <p className="text-[11px] text-[var(--text-muted)] flex items-center gap-1 mt-0.5">
@@ -194,7 +178,7 @@ export function AuditTrailModal({
                   </Badge>
                 </div>
                 <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                  Requested At: <span className="font-mono">{formatDate(submission.paymentRequestedAt)}</span>
+                  Requested At: <span className="font-mono">{formatDateTime(submission.paymentRequestedAt)}</span>
                 </p>
               </div>
             </div>
@@ -212,7 +196,7 @@ export function AuditTrailModal({
                   <Badge variant="warning" size="sm">PROCESSING</Badge>
                 </div>
                 <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                  Started At: <span className="font-mono">{formatDate(submission.processingStartedAt)}</span>
+                  Started At: <span className="font-mono">{formatDateTime(submission.processingStartedAt)}</span>
                 </p>
                 {submission.processedBy && (
                   <p className="text-[11px] text-[var(--text-muted)] flex items-center gap-1 mt-0.5">
@@ -235,7 +219,7 @@ export function AuditTrailModal({
                   <Badge variant="success" size="sm">PAID (PERMANENT LOCK)</Badge>
                 </div>
                 <p className="text-xs text-[var(--text-secondary)] mt-0.5">
-                  Paid At: <span className="font-mono">{formatDate(submission.paymentProcessedAt)}</span>
+                  Paid At: <span className="font-mono">{formatDateTime(submission.paymentProcessedAt)}</span>
                 </p>
                 {submission.paymentReference && (
                   <div className="mt-1.5 p-2 bg-emerald-500/10 border border-emerald-500/20 rounded text-xs font-mono text-emerald-500 font-semibold">

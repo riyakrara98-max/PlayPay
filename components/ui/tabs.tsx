@@ -36,8 +36,8 @@ export function Tabs({
       role="tablist"
       className={cn(
         'flex items-center gap-1 select-none overflow-x-auto scrollbar-none',
-        variant === 'segmented' && 'bg-[var(--surface-elevated)] p-1 rounded-[var(--radius-lg)] border border-[var(--border)]',
-        variant === 'underline' && 'border-b border-[var(--border)]',
+        variant === 'segmented' && 'bg-[var(--canvas-soft)] p-1 rounded-[var(--radius-lg)] border border-[var(--hairline)]',
+        variant === 'underline' && 'border-b border-[var(--hairline)]',
         fullWidth && 'w-full justify-between',
         className
       )}
@@ -53,13 +53,13 @@ export function Tabs({
             disabled={tab.disabled}
             onClick={() => !tab.disabled && onChange(tab.id)}
             className={cn(
-              'relative flex items-center justify-center gap-2 px-4 py-2 text-xs sm:text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] shrink-0 min-h-[44px] sm:min-h-0',
+              'relative flex items-center justify-center gap-2 px-4 py-2 text-[14px] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] shrink-0 min-h-[44px] sm:min-h-0',
               tab.disabled && 'opacity-50 cursor-not-allowed',
               isActive
-                ? 'text-[var(--primary)] font-semibold'
-                : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
-              variant === 'pills' && isActive && 'bg-[var(--primary)] text-[var(--primary-fg)] rounded-[var(--radius-md)]',
-              variant === 'segmented' && isActive && 'bg-[var(--surface)] text-[var(--text-primary)] shadow-sm rounded-[var(--radius-md)]',
+                ? 'text-[var(--ink)] font-semibold'
+                : 'text-[var(--ink-secondary)] hover:text-[var(--ink)]',
+              variant === 'pills' && isActive && 'bg-[var(--primary)] text-white rounded-[var(--radius-md)]',
+              variant === 'segmented' && isActive && 'bg-[var(--surface)] text-[var(--ink)] shadow-sm rounded-[var(--radius-md)]',
               fullWidth && 'flex-1'
             )}
           >

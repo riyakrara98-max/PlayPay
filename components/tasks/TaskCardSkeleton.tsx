@@ -1,51 +1,36 @@
 'use client';
 
 import React from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export function TaskCardSkeleton() {
   return (
-    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 shadow-xs animate-pulse flex flex-col justify-between">
-      <div>
-        {/* Header */}
-        <div className="flex items-start justify-between gap-3 mb-3.5">
-          <div className="flex items-center gap-3 w-full">
-            <div className="w-11 h-11 rounded-xl bg-[var(--surface-elevated)] shrink-0" />
-            <div className="space-y-2 w-full max-w-[140px]">
-              <div className="h-3 bg-[var(--surface-elevated)] rounded-md w-2/3" />
-              <div className="h-4 bg-[var(--surface-elevated)] rounded-md w-full" />
-            </div>
-          </div>
-          <div className="w-16 h-5 rounded-full bg-[var(--surface-elevated)] shrink-0" />
-        </div>
+    <div className="bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] p-4 shadow-2xs flex items-center justify-between gap-4 min-h-[88px]">
+      {/* Icon Skeleton */}
+      <Skeleton className="w-12 h-12 sm:w-14 sm:h-14 rounded-[var(--radius-md)] shrink-0" />
 
-        {/* Description */}
-        <div className="space-y-1.5 mb-4">
-          <div className="h-3 bg-[var(--surface-elevated)] rounded-md w-full" />
-          <div className="h-3 bg-[var(--surface-elevated)] rounded-md w-4/5" />
-        </div>
-
-        {/* Reward & Countdown */}
-        <div className="h-14 bg-[var(--surface-elevated)] rounded-xl mb-4" />
-
-        {/* Progress Bar */}
-        <div className="space-y-2 mb-5">
-          <div className="flex justify-between">
-            <div className="h-3 bg-[var(--surface-elevated)] rounded-md w-24" />
-            <div className="h-3 bg-[var(--surface-elevated)] rounded-md w-12" />
-          </div>
-          <div className="h-2 bg-[var(--surface-elevated)] rounded-full w-full" />
-        </div>
+      {/* Info Skeleton */}
+      <div className="flex-1 space-y-2 min-w-0">
+        <Skeleton className="h-4 w-1/2 rounded-[var(--radius-sm)]" />
+        <Skeleton className="h-3 w-3/4 rounded-[var(--radius-sm)]" />
+        <Skeleton className="h-3 w-20 rounded-[var(--radius-pill)]" />
       </div>
 
-      {/* Button */}
-      <div className="h-11 bg-[var(--surface-elevated)] rounded-xl w-full" />
+      {/* Reward + Button Skeleton */}
+      <div className="flex items-center gap-3 shrink-0">
+        <div className="flex flex-col items-end gap-1">
+          <Skeleton className="h-5 w-12 rounded-[var(--radius-sm)]" />
+          <Skeleton className="h-2.5 w-8 rounded-[var(--radius-sm)]" />
+        </div>
+        <Skeleton className="h-9 w-16 rounded-[var(--radius-md)]" />
+      </div>
     </div>
   );
 }
 
-export function TaskGridSkeleton({ count = 6 }: { count?: number }) {
+export function TaskGridSkeleton({ count = 8 }: { count?: number }) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {Array.from({ length: count }).map((_, index) => (
         <TaskCardSkeleton key={index} />
       ))}

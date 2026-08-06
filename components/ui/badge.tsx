@@ -47,9 +47,9 @@ export function Badge({
   };
 
   const sizeStyles: Record<ComponentSize, string> = {
-    sm: 'text-[10px] px-1.5 py-0.5 gap-1 font-semibold rounded-[var(--radius-sm)]',
-    md: 'text-xs px-2.5 py-0.5 gap-1.5 font-medium rounded-[var(--radius-md)]',
-    lg: 'text-sm px-3 py-1 gap-2 font-medium rounded-[var(--radius-md)]',
+    sm: 'text-[11px] px-2 py-0.5 gap-1 font-medium rounded-[var(--radius-pill)]',
+    md: 'text-[12px] px-3 py-1 gap-1.5 font-medium rounded-[var(--radius-pill)]',
+    lg: 'text-[14px] px-4 py-1.5 gap-2 font-medium rounded-[var(--radius-pill)]',
   };
 
   return (

@@ -2,9 +2,11 @@ import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  eslint: {
-    ignoreDuringBuilds: true,
+  env: {
+    NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET: 'playpay',
+    NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: 'aubq8fhy',
   },
+  turbopack: {},
   typescript: {
     ignoreBuildErrors: false,
   },
@@ -19,7 +21,7 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  output: 'standalone',
+  
   transpilePackages: ['motion'],
   webpack: (config, {dev}) => {
     // HMR is disabled in AI Studio via DISABLE_HMR env var.

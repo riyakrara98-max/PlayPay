@@ -35,7 +35,14 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Cloudinary Upload Execution
-    if (isCloudinaryConfigured()) {
+    if (!isCloudinaryConfigured()) {
+      return NextResponse.json(
+        { error: 'Cloudinary upload is not configured. CloudName and UploadPreset are required.' },
+        { status: 400 }
+      );
+    }
+
+    try {
       const { uploadPreset } = getCloudinaryConfig();
       const uploadUrl = getCloudinaryUploadUrl();
 
@@ -49,97 +56,54 @@ export async function POST(req: NextRequest) {
       });
 
       if (!cldRes.ok) {
-        const cldError = await cldRes.text();
-        console.error('[Cloudinary API Upload Error]', cldError);
+        const cldErrorText = await cldRes.text();
+        console.error('[Cloudinary API Upload Error]', cldErrorText);
         return NextResponse.json(
-          { error: 'Failed to upload image to Cloudinary servers. Please try again.' },
-          { status: 502 }
+          { error: 'Cloudinary upload failed. Please verify your upload preset and cloud name.' },
+          { status: 400 }
         );
       }
 
       const cldData = await cldRes.json();
-
-      // Rule 1 Verification on Cloudinary Response
       const secureUrl: string = cldData.secure_url || cldData.url || '';
       const resourceType: string = cldData.resource_type || 'image';
       const format: string = (cldData.format || '').toLowerCase();
 
-      // Verify HTTPS URL
-      if (!secureUrl.startsWith('https://')) {
-        return NextResponse.json(
-          { error: 'Upload security check failed: Image URL must use HTTPS.' },
-          { status: 400 }
-        );
+      // Verify HTTPS URL & Cloudinary Domain & Resource Type
+      if (
+        secureUrl.startsWith('https://') &&
+        secureUrl.includes('res.cloudinary.com') &&
+        resourceType === 'image'
+      ) {
+        return NextResponse.json({
+          url: secureUrl,
+          publicId: cldData.public_id,
+          metadata: {
+            public_id: cldData.public_id || '',
+            asset_id: cldData.asset_id || '',
+            version: cldData.version || 1,
+            bytes: cldData.bytes || file.size,
+            width: cldData.width || 0,
+            height: cldData.height || 0,
+            format: format || mimeType.replace('image/', ''),
+            resource_type: resourceType,
+            secure_url: secureUrl,
+            created_at: cldData.created_at || new Date().toISOString(),
+          },
+        });
       }
 
-      // Verify Cloudinary Domain
-      if (!secureUrl.includes('res.cloudinary.com')) {
-        return NextResponse.json(
-          { error: 'Upload verification failed: Invalid Cloudinary domain.' },
-          { status: 400 }
-        );
-      }
-
-      // Verify Resource Type == "image"
-      if (resourceType !== 'image') {
-        return NextResponse.json(
-          { error: 'Upload security check failed: Only image uploads are allowed.' },
-          { status: 400 }
-        );
-      }
-
-      // Verify Format
-      const allowedFormats = ['jpg', 'jpeg', 'png', 'webp'];
-      if (format && !allowedFormats.includes(format)) {
-        return NextResponse.json(
-          { error: `Upload security check failed: Invalid format '${format}'. Allowed: JPG, PNG, WEBP.` },
-          { status: 400 }
-        );
-      }
-
-      // Return verified payload with Rule 11 Cloudinary Metadata
-      return NextResponse.json({
-        url: secureUrl,
-        publicId: cldData.public_id,
-        metadata: {
-          public_id: cldData.public_id || '',
-          asset_id: cldData.asset_id || '',
-          version: cldData.version || 1,
-          bytes: cldData.bytes || file.size,
-          width: cldData.width || 0,
-          height: cldData.height || 0,
-          format: format || mimeType.replace('image/', ''),
-          resource_type: resourceType,
-          secure_url: secureUrl,
-          created_at: cldData.created_at || new Date().toISOString(),
-        },
-      });
+      return NextResponse.json(
+        { error: 'Cloudinary upload verification failed: Response did not contain a valid HTTPS Cloudinary URL.' },
+        { status: 400 }
+      );
+    } catch (cldErr) {
+      console.error('[Cloudinary Exception]', cldErr);
+      return NextResponse.json(
+        { error: 'Cloudinary upload request failed due to a network error.' },
+        { status: 500 }
+      );
     }
-
-    // Fallback mode for local dev/testing if Cloudinary environment keys are not configured
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    const base64 = buffer.toString('base64');
-    const fallbackUrl = `data:${mimeType};base64,${base64}`;
-    const fallbackPublicId = `fallback_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-
-    return NextResponse.json({
-      url: fallbackUrl,
-      publicId: fallbackPublicId,
-      metadata: {
-        public_id: fallbackPublicId,
-        asset_id: `asset_${fallbackPublicId}`,
-        version: 1,
-        bytes: file.size,
-        width: 800,
-        height: 600,
-        format: mimeType.replace('image/', ''),
-        resource_type: 'image',
-        secure_url: fallbackUrl,
-        created_at: new Date().toISOString(),
-      },
-      warning: 'Cloudinary environment variables not set. Using secure base64 fallback for testing.',
-    });
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : 'Upload failed due to unknown server error.';
     console.error('[Upload API Internal Error]', err);

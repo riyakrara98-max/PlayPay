@@ -26,7 +26,7 @@ export function Skeleton({
           <div
             key={i}
             className={cn(
-              'animate-pulse bg-[var(--surface-elevated)] rounded-[var(--radius-sm)] h-4',
+              'animate-pulse bg-[var(--hairline)] rounded-[var(--radius-sm)] h-4',
               i === lines - 1 ? 'w-2/3' : 'w-full',
               className
             )}
@@ -47,7 +47,7 @@ export function Skeleton({
   return (
     <div
       className={cn(
-        'animate-pulse bg-[var(--surface-elevated)] border border-[var(--border)]/50',
+        'animate-pulse bg-[var(--hairline)]',
         variantClasses[variant],
         className
       )}

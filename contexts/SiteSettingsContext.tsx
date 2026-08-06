@@ -2,9 +2,9 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { getFirebaseDb, isFirebaseConfigured } from '@/firebase/config';
+import { getFirebaseDb } from '@/firebase/config';
 import { SiteSettingsDocument, FIRESTORE_COLLECTIONS } from '@/types/firestore';
-import { handleFirestoreError, OperationType } from '@/lib/firebase-errors';
+import { logFirestoreError, OperationType } from '@/lib/firebase-errors';
 
 export const DEFAULT_SITE_SETTINGS: SiteSettingsDocument = {
   siteName: 'PlayPay',
@@ -35,12 +35,10 @@ interface SiteSettingsProviderProps {
 
 export function SiteSettingsProvider({ children }: SiteSettingsProviderProps) {
   const [settings, setSettings] = useState<SiteSettingsDocument>(DEFAULT_SITE_SETTINGS);
-  const [loading, setLoading] = useState<boolean>(() => isFirebaseConfigured());
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isFirebaseConfigured()) return;
-
     const docPath = `${FIRESTORE_COLLECTIONS.SITE_SETTINGS}/global`;
 
     try {
@@ -85,7 +83,7 @@ export function SiteSettingsProvider({ children }: SiteSettingsProviderProps) {
         (err) => {
           setError(err.message);
           setLoading(false);
-          handleFirestoreError(err, OperationType.GET, docPath);
+          logFirestoreError(err, OperationType.GET, docPath);
         }
       );
 
@@ -113,3 +111,4 @@ export function useSiteSettingsContext(): SiteSettingsContextType {
   }
   return context;
 }
+

@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   Save,
   Lock,
@@ -16,20 +17,46 @@ import {
   Loader2,
   List,
   Sparkles,
+  Check,
+  Users,
+  UserCheck,
+  Search,
+  ChevronDown,
+  ChevronUp,
+  Settings,
+  ShieldCheck,
+  PenTool,
+  CheckCircle2,
+  Info,
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Briefcase,
+  Layers,
+  X,
+  Plus,
+  TrendingUp,
+  AlertTriangle,
+  Award
 } from 'lucide-react';
 import {
   doc,
   setDoc,
   updateDoc,
+  serverTimestamp,
   collection,
+  query,
+  where,
+  getDocs,
 } from 'firebase/firestore';
 
-import { getFirebaseDb, isFirebaseConfigured } from '@/firebase/config';
+import { getFirebaseDb } from '@/firebase/config';
 import {
   TaskDocument,
   TaskCategory,
   TaskStatus,
   CommentMode,
+  TaskAssignmentType,
   FIRESTORE_COLLECTIONS,
 } from '@/types/firestore';
 import { useAuth } from '@/hooks/useAuth';
@@ -48,24 +75,28 @@ interface TaskFormProps {
 
 export function TaskForm({ initialTask = null, isEditMode = false }: TaskFormProps) {
   const router = useRouter();
-  const { currentUser, userProfile } = useAuth();
+  const { currentUser } = useAuth();
 
-  // Determine if task has existing enrollments to enforce lock rules
   const enrolledCount = initialTask?.enrolledCount ?? initialTask?.currentSubmissions ?? 0;
   const isLockedByEnrollments = isEditMode && enrolledCount > 0;
+
+  // Collapsible Sections State (Multi-section accordion style)
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    app: true,
+    config: true,
+    rewards: true,
+    assignment: false,
+    instructions: false,
+    comments: false,
+    previewMobile: false
+  });
 
   // Form Field States
   const [title, setTitle] = useState(initialTask?.title || '');
   const [appName, setAppName] = useState(initialTask?.appName || '');
-  const [playStoreUrl, setPlayStoreUrl] = useState(
-    initialTask?.playStoreUrl || initialTask?.appUrl || ''
-  );
-  const [rewardAmount, setRewardAmount] = useState<number>(
-    initialTask?.rewardAmount || 10
-  );
-  const [category, setCategory] = useState<TaskCategory>(
-    initialTask?.category || 'app_download'
-  );
+  const [playStoreUrl, setPlayStoreUrl] = useState(initialTask?.playStoreUrl || initialTask?.appUrl || '');
+  const [rewardAmount, setRewardAmount] = useState<number>(initialTask?.rewardAmount || 10);
+  const [category, setCategory] = useState<TaskCategory>(initialTask?.category || 'app_download');
   const [description, setDescription] = useState(initialTask?.description || '');
   const [instructions, setInstructions] = useState(
     initialTask?.instructions ||
@@ -73,9 +104,7 @@ export function TaskForm({ initialTask = null, isEditMode = false }: TaskFormPro
   );
   const [appIcon, setAppIcon] = useState(initialTask?.appIcon || '');
 
-  const [commentMode, setCommentMode] = useState<CommentMode>(
-    initialTask?.commentMode || 'fixed'
-  );
+  const [commentMode, setCommentMode] = useState<CommentMode>(initialTask?.commentMode || 'fixed');
   const [rawCommentsText, setRawCommentsText] = useState<string>(
     initialTask?.comments ? initialTask.comments.join('\n') : ''
   );
@@ -87,9 +116,7 @@ export function TaskForm({ initialTask = null, isEditMode = false }: TaskFormPro
   const [expiresAt, setExpiresAt] = useState<string>(() => {
     if (initialTask?.expiresAt) {
       try {
-        const d = new Date(initialTask.expiresAt);
-        // Format to YYYY-MM-DDTHH:mm for datetime-local input
-        return d.toISOString().slice(0, 16);
+        return new Date(initialTask.expiresAt).toISOString().slice(0, 16);
       } catch {
         return '';
       }
@@ -97,40 +124,143 @@ export function TaskForm({ initialTask = null, isEditMode = false }: TaskFormPro
     return '';
   });
 
-  const [status, setStatus] = useState<TaskStatus>(
-    initialTask?.status || 'active'
+  const [status, setStatus] = useState<TaskStatus>(initialTask?.status || 'active');
+
+  const [reenrollmentOption, setReenrollmentOption] = useState<string>(() => {
+    if (initialTask?.reenrollmentPolicy === 'none') return 'none';
+    const days = initialTask?.cooldownDays;
+    if (days === 0) return 'none';
+    if (days === 7) return '7';
+    if (days === 10 || days === undefined) return '10';
+    if (days === 15) return '15';
+    if (days === 30) return '30';
+    if (days === 45) return '45';
+    if (days === 60) return '60';
+    if (days === 90) return '90';
+    if (typeof days === 'number' && days > 0) return 'custom';
+    return '10';
+  });
+
+  const [customCooldownDays, setCustomCooldownDays] = useState<number>(() => {
+    const days = initialTask?.cooldownDays;
+    if (typeof days === 'number' && days > 0) return days;
+    return 10;
+  });
+
+  const [assignmentType, setAssignmentType] = useState<TaskAssignmentType>(
+    initialTask?.assignmentType || 'all'
+  );
+  const [assignedLeaderIds, setAssignedLeaderIds] = useState<string[]>(
+    initialTask?.assignedLeaderIds || []
   );
 
-  // Status & Validation States
+  const [teamLeaders, setTeamLeaders] = useState<any[]>([]);
+  const [isLoadingLeaders, setIsLoadingLeaders] = useState<boolean>(false);
+  const [leaderSearchQuery, setLeaderSearchQuery] = useState<string>('');
+
+  // Local Validation States (Presentation Layer Only)
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [isFetchingPlayStore, setIsFetchingPlayStore] = useState(false);
+  const [playStoreFetchError, setPlayStoreFetchError] = useState<string | null>(null);
+  const [fetchedPackageName, setFetchedPackageName] = useState<string | null>(null);
 
-  // Parse Fixed Comments in real-time
-  const commentAnalysis = useMemo(() => {
-    if (commentMode !== 'fixed') {
-      return {
-        lines: [],
-        validComments: [],
-        duplicates: [],
-        emptyCount: 0,
-        hasDuplicates: false,
-      };
+  // Fetch Team Leaders on Mount
+  useEffect(() => {
+    let isMounted = true;
+    const fetchTeamLeaders = async () => {
+      setIsLoadingLeaders(true);
+      try {
+        const db = getFirebaseDb();
+        const q = query(
+          collection(db, FIRESTORE_COLLECTIONS.USERS),
+          where('memberType', '==', 'team_leader')
+        );
+        const snap = await getDocs(q);
+        const list: any[] = [];
+        snap.forEach((docSnap) => {
+          const d = docSnap.data();
+          list.push({
+            uid: d.uid || docSnap.id,
+            displayName: d.displayName || 'Unnamed Leader',
+            email: d.email || '',
+            photoURL: d.photoURL || '',
+            leaderCode: d.teamLeaderCode || d.leaderCode || '',
+          });
+        });
+        if (isMounted) setTeamLeaders(list);
+      } catch (err) {
+        console.error('[Fetch Leaders Error]', err);
+      } finally {
+        if (isMounted) setIsLoadingLeaders(false);
+      }
+    };
+    fetchTeamLeaders();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Filtered leaders search
+  const filteredLeaders = useMemo(() => {
+    if (!leaderSearchQuery.trim()) return teamLeaders;
+    const q = leaderSearchQuery.toLowerCase();
+    return teamLeaders.filter(
+      (l) =>
+        l.displayName.toLowerCase().includes(q) ||
+        l.email.toLowerCase().includes(q) ||
+        (l.leaderCode || '').toLowerCase().includes(q)
+    );
+  }, [teamLeaders, leaderSearchQuery]);
+
+  // Play Store automatic metadata fetching
+  const fetchPlayStoreMetadata = async (urlInput?: string) => {
+    const targetUrl = (urlInput !== undefined ? urlInput : playStoreUrl).trim();
+    if (!targetUrl) return;
+    setPlayStoreFetchError(null);
+    setIsFetchingPlayStore(true);
+    try {
+      const res = await fetch('/api/playstore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: targetUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Failed to fetch');
+      if (data.appName) {
+        setAppName(data.appName);
+        if (!title.trim()) setTitle(`Rate & Review ${data.appName} on Play Store`);
+      }
+      if (data.appIcon) setAppIcon(data.appIcon);
+      if (!targetUrl.startsWith('http')) {
+        setPlayStoreUrl(`https://play.google.com/store/apps/details?id=${data.packageName}`);
+      }
+      setFetchedPackageName(data.packageName);
+      
+      // Clear errors
+      setValidationErrors(prev => {
+        const updated = { ...prev };
+        delete updated.playStoreUrl;
+        delete updated.appName;
+        return updated;
+      });
+    } catch (err: any) {
+      setPlayStoreFetchError(err.message || 'Unable to fetch Play Store info.');
+    } finally {
+      setIsFetchingPlayStore(false);
     }
+  };
 
-    const lines = rawCommentsText
-      .split('\n')
-      .map((line) => line.trim());
-
+  // Fixed Comments database analysis
+  const commentAnalysis = useMemo(() => {
+    if (commentMode !== 'fixed') return { validComments: [], hasDuplicates: false, duplicates: [] };
+    const lines = rawCommentsText.split('\n').map((line) => line.trim());
     const validComments: string[] = [];
     const duplicates: string[] = [];
     const seen = new Set<string>();
-    let emptyCount = 0;
-
     lines.forEach((line) => {
-      if (!line) {
-        emptyCount++;
-        return;
-      }
+      if (!line) return;
       if (seen.has(line)) {
         duplicates.push(line);
       } else {
@@ -138,23 +268,12 @@ export function TaskForm({ initialTask = null, isEditMode = false }: TaskFormPro
         validComments.push(line);
       }
     });
-
-    return {
-      lines,
-      validComments,
-      duplicates,
-      emptyCount,
-      hasDuplicates: duplicates.length > 0,
-    };
+    return { validComments, duplicates, hasDuplicates: duplicates.length > 0 };
   }, [rawCommentsText, commentMode]);
 
-  // Sync Total Slots with Fixed Comments count
-  const effectiveTotalSlots =
-    commentMode === 'fixed'
-      ? commentAnalysis.validComments.length
-      : manualSlots;
+  const effectiveTotalSlots = commentMode === 'fixed' ? commentAnalysis.validComments.length : manualSlots;
 
-  // Construct TaskFormData for Live Task Preview
+  // Live Preview Data assembly
   const previewData: TaskFormData = {
     title,
     appName,
@@ -173,119 +292,148 @@ export function TaskForm({ initialTask = null, isEditMode = false }: TaskFormPro
     status,
   };
 
-  // Form Validation Logic
+  // Section Expansion Helper
+  const toggleSection = (section: string) => {
+    setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  const expandAll = () => {
+    setExpandedSections({
+      app: true,
+      config: true,
+      rewards: true,
+      assignment: true,
+      instructions: true,
+      comments: true,
+      previewMobile: true
+    });
+  };
+
+  const collapseAll = () => {
+    setExpandedSections({
+      app: false,
+      config: false,
+      rewards: false,
+      assignment: false,
+      instructions: false,
+      comments: false,
+      previewMobile: false
+    });
+  };
+
+  // Android Keyboard Friendly Scroll-Into-View Focus Event
+  const handleFocus = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    e.target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
+
+  // Client-Side Validation Logic (Presentation layer validation UX)
   const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
     setFormError(null);
 
-    if (!title.trim()) {
-      setFormError('Task Title is required.');
-      return false;
-    }
-
-    if (!appName.trim()) {
-      setFormError('App Name is required.');
-      return false;
-    }
-
     if (!playStoreUrl.trim()) {
-      setFormError('Play Store URL is required.');
-      return false;
+      errors.playStoreUrl = 'Play Store URL is required';
     }
-
-    // Basic URL validation
-    if (
-      !playStoreUrl.startsWith('http://') &&
-      !playStoreUrl.startsWith('https://')
-    ) {
-      setFormError('Play Store URL must start with http:// or https://');
-      return false;
+    if (!appName.trim()) {
+      errors.appName = 'Partner App Name is required';
     }
-
+    if (!title.trim()) {
+      errors.title = 'Task Title is required';
+    }
     if (!rewardAmount || rewardAmount <= 0) {
-      setFormError('Reward amount must be greater than ₹0.');
-      return false;
+      errors.rewardAmount = 'Base reward must be greater than 0';
     }
 
-    if (commentMode === 'fixed') {
-      if (commentAnalysis.validComments.length === 0) {
-        setFormError('Fixed Comments mode requires at least 1 valid comment.');
-        return false;
-      }
+    if (commentMode === 'fixed' && commentAnalysis.validComments.length === 0) {
+      errors.comments = 'Fixed Comments mode requires at least 1 valid comment.';
+    }
 
-      if (commentAnalysis.hasDuplicates) {
-        setFormError(
-          `Duplicate comments found (${commentAnalysis.duplicates.length}). Please remove duplicate lines before saving.`
-        );
-        return false;
-      }
-    } else if (commentMode === 'hint') {
+    if (commentMode === 'hint') {
       if (!hintText.trim()) {
-        setFormError('Comment Hint guidance is required in Hint Mode.');
-        return false;
+        errors.hintText = 'Hint / Guidance Text is required.';
       }
       if (!manualSlots || manualSlots <= 0) {
-        setFormError('Total Slots must be at least 1 in Hint Mode.');
-        return false;
+        errors.manualSlots = 'Manual Slots count must be greater than 0.';
       }
+    }
+
+    if (assignmentType === 'leaders' && assignedLeaderIds.length === 0) {
+      errors.assignment = 'Exclusive Team assignment requires selecting at least 1 Team Leader.';
+    }
+
+    setValidationErrors(errors);
+
+    // If any error exists, automatically expand relevant sections & focus
+    if (Object.keys(errors).length > 0) {
+      const updatedExpanded = { ...expandedSections };
+      if (errors.playStoreUrl || errors.appName) {
+        updatedExpanded.app = true;
+      }
+      if (errors.title) {
+        updatedExpanded.config = true;
+      }
+      if (errors.rewardAmount) {
+        updatedExpanded.rewards = true;
+      }
+      if (errors.comments || errors.hintText || errors.manualSlots) {
+        updatedExpanded.comments = true;
+      }
+      if (errors.assignment) {
+        updatedExpanded.assignment = true;
+      }
+      setExpandedSections(updatedExpanded);
+      setFormError('Please resolve all validation errors in the highlighted sections.');
+      return false;
     }
 
     return true;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
+  // Submit Handler
+  const handleSubmit = async () => {
     if (!validateForm()) return;
-
-    if (!isFirebaseConfigured()) {
-      setFormError('Firebase is not configured.');
-      return;
-    }
-
     setIsSubmitting(true);
     setFormError(null);
-
     try {
       const db = getFirebaseDb();
-      const nowIso = new Date().toISOString();
       const userUid = currentUser?.uid || 'admin_system';
+      const formattedExpiry = expiresAt ? new Date(expiresAt).toISOString() : undefined;
+      const baseRewardValue = Number(rewardAmount);
 
-      let formattedExpiry: string | undefined = undefined;
-      if (expiresAt) {
-        try {
-          formattedExpiry = new Date(expiresAt).toISOString();
-        } catch {
-          // ignore
-        }
-      }
+      let targetTaskId = '';
+      const calculatedPolicy = reenrollmentOption === 'none' ? 'none' : 'cooldown';
+      const calculatedCooldownDays =
+        reenrollmentOption === 'none'
+          ? 0
+          : reenrollmentOption === 'custom'
+          ? Math.max(1, Number(customCooldownDays) || 10)
+          : Number(reenrollmentOption);
 
       if (isEditMode && initialTask?.id) {
-        // UPDATE EXISTING TASK
-        const taskRef = doc(db, FIRESTORE_COLLECTIONS.TASKS, initialTask.id);
-
-        const updatePayload: Record<string, unknown> = {
+        targetTaskId = initialTask.id;
+        const updatePayload: any = {
           title: title.trim(),
-          rewardAmount: Number(rewardAmount),
+          rewardAmount: baseRewardValue,
+          baseReward: baseRewardValue,
+          assignmentType,
+          assignedLeaderIds: assignmentType === 'leaders' ? assignedLeaderIds : [],
           category,
           description: description.trim(),
           instructions: instructions.trim(),
           status,
-          updatedAt: nowIso,
+          reenrollmentPolicy: calculatedPolicy,
+          cooldownDays: calculatedCooldownDays,
+          updatedAt: serverTimestamp(),
           updatedBy: userUid,
         };
-
         if (appIcon) updatePayload.appIcon = appIcon;
         if (formattedExpiry) updatePayload.expiresAt = formattedExpiry;
-
-        // Only update locked fields if NOT locked by existing enrollments
         if (!isLockedByEnrollments) {
           updatePayload.appName = appName.trim();
           updatePayload.playStoreUrl = playStoreUrl.trim();
-          updatePayload.appUrl = playStoreUrl.trim();
           updatePayload.commentMode = commentMode;
           updatePayload.totalSlots = effectiveTotalSlots;
           updatePayload.maxSubmissions = effectiveTotalSlots;
-
           if (commentMode === 'fixed') {
             updatePayload.comments = commentAnalysis.validComments;
             updatePayload.hint = '';
@@ -294,19 +442,19 @@ export function TaskForm({ initialTask = null, isEditMode = false }: TaskFormPro
             updatePayload.hint = hintText.trim();
           }
         }
-
-        await updateDoc(taskRef, updatePayload);
+        await updateDoc(doc(db, FIRESTORE_COLLECTIONS.TASKS, targetTaskId), updatePayload);
       } else {
-        // CREATE NEW TASK
         const newDocRef = doc(collection(db, FIRESTORE_COLLECTIONS.TASKS));
-
-        const newTaskPayload: TaskDocument = {
+        targetTaskId = newDocRef.id;
+        await setDoc(newDocRef, {
           id: newDocRef.id,
           title: title.trim(),
           appName: appName.trim(),
           playStoreUrl: playStoreUrl.trim(),
-          appUrl: playStoreUrl.trim(),
-          rewardAmount: Number(rewardAmount),
+          rewardAmount: baseRewardValue,
+          baseReward: baseRewardValue,
+          assignmentType,
+          assignedLeaderIds: assignmentType === 'leaders' ? assignedLeaderIds : [],
           category,
           description: description.trim(),
           instructions: instructions.trim(),
@@ -319,432 +467,1149 @@ export function TaskForm({ initialTask = null, isEditMode = false }: TaskFormPro
           enrolledCount: 0,
           currentSubmissions: 0,
           status,
+          reenrollmentPolicy: calculatedPolicy,
+          cooldownDays: calculatedCooldownDays,
           isVerified: true,
           expiresAt: formattedExpiry,
           createdBy: userUid,
-          createdAt: nowIso,
-          updatedAt: nowIso,
-        };
-
-        await setDoc(newDocRef, newTaskPayload);
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
       }
-
       router.push('/admin/tasks');
-    } catch (err: unknown) {
-      console.error('[TaskForm Error]', err);
-      const msg = err instanceof Error ? err.message : 'Failed to save task document to Firestore.';
-      setFormError(msg);
+    } catch (err: any) {
+      setFormError(err.message || 'Failed to save task.');
       setIsSubmitting(false);
     }
   };
 
+  // Helper values for assignment counts
+  const selectedLeadersCount = assignedLeaderIds.length;
+  const assignmentSummaryText =
+    assignmentType === 'all'
+      ? 'Global Assignment (Available to all registered team members immediately)'
+      : `Exclusive Assignment (Visible only to sub-teams under the ${selectedLeadersCount} whitelisted Team Leaders)`;
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-      {/* Main Form Column (8 cols) */}
-      <form onSubmit={handleSubmit} className="lg:col-span-7 space-y-6">
-        {/* Lock Warning Banner if enrollments > 0 */}
-        {isLockedByEnrollments && (
-          <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-[var(--radius-lg)] flex items-start gap-3 text-xs text-amber-500">
-            <Lock className="w-5 h-5 shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <span className="font-bold text-amber-400">
-                Structural Fields Locked ({enrolledCount} active user enrollments)
-              </span>
-              <p className="text-[11px] leading-relaxed opacity-90">
-                To prevent data corruption for users currently completing this task, Comment Mode, Comments, Slot counts, App Name, and Play Store URL are permanently locked. Title, Reward, Instructions, Status, and Expiry date remain fully editable.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Section 1: Basic App Details */}
-        <div className="p-6 rounded-[var(--radius-xl)] bg-[var(--surface)] border border-[var(--border)] shadow-xs space-y-5">
-          <div className="flex items-center gap-2 pb-3 border-b border-[var(--border)]">
-            <Smartphone className="w-4 h-4 text-amber-500" />
-            <h3 className="text-sm font-bold font-heading text-[var(--text-primary)]">
-              App & Offer Identification
-            </h3>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Task Title */}
-            <div className="sm:col-span-2">
-              <Input
-                label="Task Title"
-                placeholder="e.g. Rate & Post 5-Star Review on Play Store"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                required
-              />
-            </div>
-
-            {/* App Name */}
-            <div>
-              <Input
-                label="Partner App Name"
-                placeholder="e.g. Dream11 or Pocket Ludo"
-                value={appName}
-                onChange={(e) => setAppName(e.target.value)}
-                disabled={isLockedByEnrollments}
-                leftIcon={isLockedByEnrollments ? <Lock className="w-4 h-4 text-amber-500" /> : undefined}
-                required
-              />
-            </div>
-
-            {/* Reward Amount */}
-            <div>
-              <Input
-                label="User Reward Amount (₹)"
-                type="number"
-                min={1}
-                step={1}
-                placeholder="10"
-                value={rewardAmount}
-                onChange={(e) => setRewardAmount(Number(e.target.value))}
-                leftIcon={<DollarSign className="w-4 h-4 text-emerald-500" />}
-                required
-              />
-            </div>
-
-            {/* Play Store URL */}
-            <div className="sm:col-span-2">
-              <Input
-                label="Google Play Store URL"
-                placeholder="https://play.google.com/store/apps/details?id=com.example.app"
-                value={playStoreUrl}
-                onChange={(e) => setPlayStoreUrl(e.target.value)}
-                disabled={isLockedByEnrollments}
-                leftIcon={isLockedByEnrollments ? <Lock className="w-4 h-4 text-amber-500" /> : <LinkIcon className="w-4 h-4 text-[var(--text-muted)]" />}
-                required
-              />
-            </div>
-
-            {/* Category */}
-            <div>
-              <Select
-                label="Offer Category"
-                value={category}
-                onChange={(val) => setCategory(val as TaskCategory)}
-                options={[
-                  { value: 'app_download', label: 'App Download & Review' },
-                  { value: 'survey', label: 'Survey / Questionnaire' },
-                  { value: 'video_watch', label: 'Video Watch & Share' },
-                  { value: 'social_follow', label: 'Social Media Action' },
-                  { value: 'referral', label: 'Referral Sign Up' },
-                  { value: 'other', label: 'Other Offer' },
-                ]}
-              />
-            </div>
-
-            {/* Status */}
-            <div>
-              <Select
-                label="Offer Status"
-                value={status}
-                onChange={(val) => setStatus(val as TaskStatus)}
-                options={[
-                  { value: 'active', label: 'Active (Published to Users)' },
-                  { value: 'paused', label: 'Paused / Inactive' },
-                  { value: 'completed', label: 'Completed (Slots Full)' },
-                  { value: 'draft', label: 'Draft Mode' },
-                ]}
-              />
-            </div>
-
-            {/* Expiry Date */}
-            <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold text-[var(--text-primary)] mb-1">
-                Optional Expiry Date & Time
-              </label>
-              <div className="relative">
-                <input
-                  type="datetime-local"
-                  value={expiresAt}
-                  onChange={(e) => setExpiresAt(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-[var(--radius-md)] bg-[var(--surface-elevated)] border border-[var(--border)] text-xs font-mono text-[var(--text-primary)] focus:outline-2 focus:outline-[var(--primary)]"
-                />
-              </div>
-              <p className="text-[11px] text-[var(--text-muted)] mt-1">
-                Tasks past expiry date will automatically transition status to Expired.
-              </p>
-            </div>
+    <div className="pb-32 space-y-6">
+      {/* Structural Lock Alert */}
+      {isLockedByEnrollments && (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3 text-sm text-amber-800 shadow-xs">
+          <Lock className="w-5 h-5 mt-0.5 shrink-0 text-amber-600" />
+          <div className="space-y-1">
+            <span className="font-bold text-amber-950">Structural Parameters Frozen</span>
+            <p className="text-xs leading-relaxed text-amber-700/90">
+              There are <strong>{enrolledCount} active user enrollments</strong> on this task. To prevent structural mismatch or data loss for working members, the Play Store URL, Partner Name, Comment Strategy, and Slots cannot be modified.
+            </p>
           </div>
         </div>
+      )}
 
-        {/* Section 2: App Icon Upload */}
-        <div className="p-6 rounded-[var(--radius-xl)] bg-[var(--surface)] border border-[var(--border)] shadow-xs space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
-            <h3 className="text-sm font-bold font-heading text-[var(--text-primary)]">
-              Cloudinary App Icon Asset
-            </h3>
-            <Badge variant="outline" size="sm">
-              Folder: playpay/app-icons
-            </Badge>
-          </div>
-
-          <CloudinaryIconUpload
-            value={appIcon}
-            onChange={(url) => setAppIcon(url)}
-          />
-        </div>
-
-        {/* Section 3: Comment Allocation Mode & Configuration */}
-        <div className="p-6 rounded-[var(--radius-xl)] bg-[var(--surface)] border border-[var(--border)] shadow-xs space-y-5">
-          <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
-            <div className="flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-amber-500" />
-              <h3 className="text-sm font-bold font-heading text-[var(--text-primary)]">
-                Comment Allocation Configuration
-              </h3>
-            </div>
-            {isLockedByEnrollments && (
-              <Badge variant="warning" size="sm" className="gap-1">
-                <Lock className="w-3 h-3" /> Locked
-              </Badge>
-            )}
-          </div>
-
-          {/* Mode Selector */}
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              disabled={isLockedByEnrollments}
-              onClick={() => setCommentMode('fixed')}
-              className={`p-3.5 rounded-[var(--radius-md)] border text-left flex flex-col gap-1 transition-all ${
-                commentMode === 'fixed'
-                  ? 'border-amber-500 bg-amber-500/10 text-amber-500 ring-1 ring-amber-500'
-                  : 'border-[var(--border)] bg-[var(--surface-elevated)]/50 text-[var(--text-secondary)] hover:bg-[var(--surface-elevated)]'
-              } ${isLockedByEnrollments ? 'cursor-not-allowed opacity-75' : ''}`}
-            >
-              <div className="flex items-center gap-2 font-bold text-xs">
-                <List className="w-4 h-4" />
-                <span>Fixed Comments Mode</span>
-              </div>
-              <span className="text-[10px] text-[var(--text-muted)]">
-                Provide specific lines. Each enrolled user gets one unique comment automatically.
-              </span>
-            </button>
-
-            <button
-              type="button"
-              disabled={isLockedByEnrollments}
-              onClick={() => setCommentMode('hint')}
-              className={`p-3.5 rounded-[var(--radius-md)] border text-left flex flex-col gap-1 transition-all ${
-                commentMode === 'hint'
-                  ? 'border-amber-500 bg-amber-500/10 text-amber-500 ring-1 ring-amber-500'
-                  : 'border-[var(--border)] bg-[var(--surface-elevated)]/50 text-[var(--text-secondary)] hover:bg-[var(--surface-elevated)]'
-              } ${isLockedByEnrollments ? 'cursor-not-allowed opacity-75' : ''}`}
-            >
-              <div className="flex items-center gap-2 font-bold text-xs">
-                <HelpCircle className="w-4 h-4" />
-                <span>Hint Guidance Mode</span>
-              </div>
-              <span className="text-[10px] text-[var(--text-muted)]">
-                Provide general guidelines. Users write their own comment based on your hint.
-              </span>
-            </button>
-          </div>
-
-          {/* Fixed Comments Editor */}
-          {commentMode === 'fixed' && (
-            <div className="space-y-4 pt-2">
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-[var(--text-primary)]">
-                  Comment Database (One comment per line)
-                </label>
-                <Textarea
-                  rows={8}
-                  placeholder={`Great gaming app! Smooth interface and super fast payouts.\nLoved the graphics and user experience. 5 stars!\nHighly recommended for casual ludo tournaments.`}
-                  value={rawCommentsText}
-                  onChange={(e) => setRawCommentsText(e.target.value)}
-                  disabled={isLockedByEnrollments}
-                  className="font-mono text-xs"
-                />
-              </div>
-
-              {/* Realtime Comment Analysis Bar */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3 rounded-[var(--radius-md)] bg-[var(--surface-elevated)] border border-[var(--border)] text-center">
-                  <span className="text-[10px] uppercase font-bold text-[var(--text-muted)] block">
-                    Total Comments
-                  </span>
-                  <span className="text-lg font-extrabold font-mono text-[var(--primary)]">
-                    {commentAnalysis.validComments.length}
-                  </span>
-                </div>
-
-                <div className="p-3 rounded-[var(--radius-md)] bg-[var(--surface-elevated)] border border-[var(--border)] text-center">
-                  <span className="text-[10px] uppercase font-bold text-[var(--text-muted)] block">
-                    Auto Total Slots
-                  </span>
-                  <span className="text-lg font-extrabold font-mono text-emerald-500">
-                    {effectiveTotalSlots}
-                  </span>
-                </div>
-
-                <div className="p-3 rounded-[var(--radius-md)] bg-[var(--surface-elevated)] border border-[var(--border)] text-center">
-                  <span className="text-[10px] uppercase font-bold text-[var(--text-muted)] block">
-                    Blank Lines Filtered
-                  </span>
-                  <span className="text-lg font-extrabold font-mono text-[var(--text-muted)]">
-                    {commentAnalysis.emptyCount}
-                  </span>
-                </div>
-
-                <div className="p-3 rounded-[var(--radius-md)] bg-[var(--surface-elevated)] border border-[var(--border)] text-center">
-                  <span className="text-[10px] uppercase font-bold text-[var(--text-muted)] block">
-                    Duplicates
-                  </span>
-                  <span className={`text-lg font-extrabold font-mono ${commentAnalysis.hasDuplicates ? 'text-rose-500' : 'text-emerald-500'}`}>
-                    {commentAnalysis.duplicates.length}
-                  </span>
-                </div>
-              </div>
-
-              {/* Duplicate Comment Alert */}
-              {commentAnalysis.hasDuplicates && (
-                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-[var(--radius-md)] text-xs text-rose-500 space-y-1">
-                  <div className="flex items-center gap-2 font-bold">
-                    <AlertCircle className="w-4 h-4" />
-                    <span>Duplicate Comments Detected ({commentAnalysis.duplicates.length})</span>
-                  </div>
-                  <p className="text-[11px] opacity-90">
-                    Duplicate comments: &quot;{commentAnalysis.duplicates.slice(0, 3).join('", "')}&quot;... Please remove duplicates so each slot gets a unique string.
-                  </p>
-                </div>
-              )}
-
-              {/* Parsed Preview (First 10) */}
-              {commentAnalysis.validComments.length > 0 && (
-                <div className="p-3 rounded-[var(--radius-md)] bg-[var(--surface-elevated)]/40 border border-[var(--border)] space-y-2 text-xs">
-                  <span className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-wider block">
-                    Parsed Comments Preview (Showing First {Math.min(10, commentAnalysis.validComments.length)} of {commentAnalysis.validComments.length})
-                  </span>
-                  <ul className="space-y-1 list-disc list-inside text-[var(--text-secondary)] font-mono text-[11px]">
-                    {commentAnalysis.validComments.slice(0, 10).map((cmt, idx) => (
-                      <li key={idx} className="truncate">
-                        &quot;{cmt}&quot;
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Hint Mode Editor */}
-          {commentMode === 'hint' && (
-            <div className="space-y-4 pt-2">
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-[var(--text-primary)]">
-                  Comment Guidance / Hint
-                </label>
-                <Textarea
-                  rows={3}
-                  placeholder="e.g. Write a positive 5-star review mentioning the fast withdrawal speed, smooth graphics, and friendly customer support."
-                  value={hintText}
-                  onChange={(e) => setHintText(e.target.value)}
-                  disabled={isLockedByEnrollments}
-                />
-              </div>
-
-              <div className="max-w-xs">
-                <Input
-                  label="Manual Total Slots"
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={manualSlots}
-                  onChange={(e) => setManualSlots(Number(e.target.value))}
-                  disabled={isLockedByEnrollments}
-                  leftIcon={isLockedByEnrollments ? <Lock className="w-4 h-4 text-amber-500" /> : undefined}
-                  required
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Section 4: Detailed Instructions */}
-        <div className="p-6 rounded-[var(--radius-xl)] bg-[var(--surface)] border border-[var(--border)] shadow-xs space-y-4">
-          <div className="flex items-center gap-2 pb-3 border-b border-[var(--border)]">
-            <FileText className="w-4 h-4 text-amber-500" />
-            <h3 className="text-sm font-bold font-heading text-[var(--text-primary)]">
-              Detailed Offer Instructions & Description
-            </h3>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-[var(--text-primary)] mb-1">
-                Short Description (Card Subtitle)
-              </label>
-              <Input
-                placeholder="e.g. Download and review our partner app to earn instant cash reward"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-[var(--text-primary)] mb-1">
-                Step-by-Step Task Instructions
-              </label>
-              <Textarea
-                rows={6}
-                value={instructions}
-                onChange={(e) => setInstructions(e.target.value)}
-                placeholder="List clear numbered instructions for the user..."
-              />
-            </div>
+      {/* Global Form Validation Error Summary */}
+      {formError && (
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-3 text-sm text-rose-800 shadow-xs animate-in fade-in duration-200">
+          <AlertCircle className="w-5 h-5 mt-0.5 shrink-0 text-rose-600" />
+          <div className="space-y-1">
+            <span className="font-bold text-rose-950">Review Form Requirements</span>
+            <p className="text-xs text-rose-700/90">{formError}</p>
           </div>
         </div>
+      )}
 
-        {/* Error Alert */}
-        {formError && (
-          <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-[var(--radius-lg)] flex items-center gap-3 text-xs text-rose-500 font-medium">
-            <AlertCircle className="w-5 h-5 shrink-0" />
-            <span>{formError}</span>
-          </div>
-        )}
-
-        {/* Action Buttons */}
-        <div className="flex items-center justify-end gap-3 pt-2">
+      {/* Controller Buttons to Expand/Collapse All */}
+      <div className="flex items-center justify-between gap-3 bg-white/50 border border-slate-100 rounded-xl p-3 shadow-xs">
+        <span className="text-xs text-slate-500 font-semibold uppercase tracking-wider">
+          Form Workspace Organizer
+        </span>
+        <div className="flex items-center gap-2">
           <Button
             type="button"
             variant="outline"
+            size="sm"
+            onClick={collapseAll}
+            className="text-xs font-semibold px-3 py-1.5 h-8 border-slate-200"
+          >
+            Collapse All
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={expandAll}
+            className="text-xs font-semibold px-3 py-1.5 h-8 border-slate-200"
+          >
+            Expand All
+          </Button>
+        </div>
+      </div>
+
+      {/* Primary Split Workspace */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Left Column: Form Editor Accordions */}
+        <div className="lg:col-span-8 space-y-4">
+          
+          {/* Section 1: Application Information */}
+          <div className={`bg-white border rounded-2xl transition-all shadow-xs overflow-hidden ${
+            expandedSections.app ? 'border-slate-200 shadow-sm' : 'border-slate-100 hover:border-slate-200'
+          }`}>
+            <div
+              onClick={() => toggleSection('app')}
+              className="p-4 sm:p-5 flex items-center justify-between cursor-pointer select-none border-b border-transparent bg-slate-50/20"
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+                  expandedSections.app ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  <Smartphone className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-slate-800">Application Information</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Define Play Store parameters, package, and logo</p>
+                </div>
+              </div>
+              <div className="p-1 rounded-full text-slate-400">
+                {expandedSections.app ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+              </div>
+            </div>
+
+            <AnimatePresence initial={false}>
+              {expandedSections.app && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div className="p-4 sm:p-6 border-t border-slate-50 space-y-5">
+                    {/* Play Store URL */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Google Play Store URL <span className="text-rose-500">*</span>
+                        </label>
+                        {!isLockedByEnrollments && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => fetchPlayStoreMetadata()}
+                            disabled={isFetchingPlayStore || !playStoreUrl.trim()}
+                            className="h-7 text-xs text-slate-800 hover:bg-slate-50 font-bold px-2 rounded-lg"
+                          >
+                            {isFetchingPlayStore ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                            ) : (
+                              <Sparkles className="w-3.5 h-3.5 mr-1.5 text-amber-500" />
+                            )}
+                            Fetch Metadata
+                          </Button>
+                        )}
+                      </div>
+                      <Input
+                        placeholder="https://play.google.com/store/apps/details?id=com.example.app"
+                        value={playStoreUrl}
+                        onChange={(e) => {
+                          setPlayStoreUrl(e.target.value);
+                          if (validationErrors.playStoreUrl) {
+                            setValidationErrors(prev => {
+                              const updated = { ...prev };
+                              delete updated.playStoreUrl;
+                              return updated;
+                            });
+                          }
+                        }}
+                        disabled={isLockedByEnrollments}
+                        onFocus={handleFocus}
+                        leftIcon={isLockedByEnrollments ? <Lock className="w-4 h-4 text-amber-500" /> : <LinkIcon className="w-4 h-4 text-slate-400" />}
+                        className={`h-11 rounded-xl text-sm ${
+                          validationErrors.playStoreUrl ? 'border-rose-300 bg-rose-50/20' : 'border-slate-200'
+                        }`}
+                      />
+                      {validationErrors.playStoreUrl && (
+                        <p className="text-xs text-rose-500 font-semibold">{validationErrors.playStoreUrl}</p>
+                      )}
+                      {playStoreFetchError && (
+                        <p className="text-xs text-amber-600 font-medium flex items-center gap-1.5 bg-amber-50 p-2.5 rounded-lg border border-amber-100">
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                          {playStoreFetchError}
+                        </p>
+                      )}
+                      <p className="text-[11px] text-slate-400">
+                        Paste the full URL from the play store, then click &quot;Fetch Metadata&quot; to automatically pre-populate the App Name and App Icon.
+                      </p>
+                    </div>
+
+                    {/* Partner App Name */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                        Partner App Name <span className="text-rose-500">*</span>
+                      </label>
+                      <Input
+                        placeholder="e.g. Dream11, PhonePe, My11Circle"
+                        value={appName}
+                        onChange={(e) => {
+                          setAppName(e.target.value);
+                          if (validationErrors.appName) {
+                            setValidationErrors(prev => {
+                              const updated = { ...prev };
+                              delete updated.appName;
+                              return updated;
+                            });
+                          }
+                        }}
+                        disabled={isLockedByEnrollments}
+                        onFocus={handleFocus}
+                        leftIcon={isLockedByEnrollments ? <Lock className="w-4 h-4 text-amber-500" /> : <Smartphone className="w-4 h-4 text-slate-400" />}
+                        className={`h-11 rounded-xl text-sm ${
+                          validationErrors.appName ? 'border-rose-300 bg-rose-50/20' : 'border-slate-200'
+                        }`}
+                      />
+                      {validationErrors.appName && (
+                        <p className="text-xs text-rose-500 font-semibold">{validationErrors.appName}</p>
+                      )}
+                    </div>
+
+                    {/* App Icon Upload */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                        App Logo / Icon
+                      </label>
+                      <CloudinaryIconUpload
+                        value={appIcon}
+                        onChange={(url) => setAppIcon(url)}
+                        disabled={isLockedByEnrollments}
+                      />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Section 2: Task Configuration */}
+          <div className={`bg-white border rounded-2xl transition-all shadow-xs overflow-hidden ${
+            expandedSections.config ? 'border-slate-200 shadow-sm' : 'border-slate-100 hover:border-slate-200'
+          }`}>
+            <div
+              onClick={() => toggleSection('config')}
+              className="p-4 sm:p-5 flex items-center justify-between cursor-pointer select-none bg-slate-50/20"
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+                  expandedSections.config ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  <Settings className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-slate-800">Task Configuration</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Control campaign title, status, category, & policies</p>
+                </div>
+              </div>
+              <div className="p-1 rounded-full text-slate-400">
+                {expandedSections.config ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+              </div>
+            </div>
+
+            <AnimatePresence initial={false}>
+              {expandedSections.config && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div className="p-4 sm:p-6 border-t border-slate-50 space-y-5">
+                    {/* Task Title */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                        Task Campaign Title <span className="text-rose-500">*</span>
+                      </label>
+                      <Input
+                        placeholder="e.g. Install, Rate 5-Star & Post Positive Review"
+                        value={title}
+                        onChange={(e) => {
+                          setTitle(e.target.value);
+                          if (validationErrors.title) {
+                            setValidationErrors(prev => {
+                              const updated = { ...prev };
+                              delete updated.title;
+                              return updated;
+                            });
+                          }
+                        }}
+                        onFocus={handleFocus}
+                        leftIcon={<FileText className="w-4 h-4 text-slate-400" />}
+                        className={`h-11 rounded-xl text-sm ${
+                          validationErrors.title ? 'border-rose-300 bg-rose-50/20' : 'border-slate-200'
+                        }`}
+                      />
+                      {validationErrors.title && (
+                        <p className="text-xs text-rose-500 font-semibold">{validationErrors.title}</p>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Category Selector */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Task Category / Type
+                        </label>
+                        <Select
+                          value={category}
+                          onChange={(val) => setCategory(val as TaskCategory)}
+                          options={[
+                            { value: 'app_download', label: 'App Download & Review' },
+                            { value: 'survey', label: 'Survey / Questionnaire' },
+                            { value: 'video_watch', label: 'Video Watch & Share' },
+                            { value: 'social_follow', label: 'Social Media Action' },
+                            { value: 'referral', label: 'Referral Sign Up' },
+                            { value: 'other', label: 'Other Offer' },
+                          ]}
+                          className="h-11 rounded-xl text-sm border-slate-200"
+                        />
+                      </div>
+
+                      {/* Status Selector */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Campaign Visibility Status
+                        </label>
+                        <Select
+                          value={status}
+                          onChange={(val) => setStatus(val as TaskStatus)}
+                          options={[
+                            { value: 'active', label: 'Active (Live & Ready to Enroll)' },
+                            { value: 'paused', label: 'Paused (Temporarily Suspended)' },
+                            { value: 'draft', label: 'Draft (In Review/Operations Only)' },
+                          ]}
+                          className="h-11 rounded-xl text-sm border-slate-200"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Campaign Expiration */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Campaign Expiration Date (Optional)
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="datetime-local"
+                            value={expiresAt}
+                            onChange={(e) => setExpiresAt(e.target.value)}
+                            onFocus={handleFocus}
+                            className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 text-sm font-mono text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 transition-all"
+                          />
+                          <Calendar className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        </div>
+                      </div>
+
+                      {/* Re-enrollment Cooldown Policy */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Re-enrollment Cooldown Period
+                        </label>
+                        <Select
+                          value={reenrollmentOption}
+                          onChange={(val) => setReenrollmentOption(val)}
+                          options={[
+                            { value: 'none', label: 'No Restriction (Infinite repeats)' },
+                            { value: '7', label: '7 Days Cooldown' },
+                            { value: '10', label: '10 Days Cooldown (Recommended)' },
+                            { value: '15', label: '15 Days Cooldown' },
+                            { value: '30', label: '30 Days Cooldown' },
+                            { value: '45', label: '45 Days Cooldown' },
+                            { value: '60', label: '60 Days Cooldown' },
+                            { value: '90', label: '90 Days Cooldown' },
+                            { value: 'custom', label: 'Custom Days Cooldown' },
+                          ]}
+                          className="h-11 rounded-xl text-sm border-slate-200"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Custom Cooldown Days Field */}
+                    {reenrollmentOption === 'custom' && (
+                      <div className="space-y-1.5 p-4 bg-slate-50 rounded-xl border border-slate-100 animate-in fade-in slide-in-from-top-2 duration-150">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Custom Cooldown Days
+                        </label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={365}
+                          value={customCooldownDays}
+                          onChange={(e) => setCustomCooldownDays(Number(e.target.value))}
+                          onFocus={handleFocus}
+                          className="h-10 border-slate-200 text-sm rounded-lg"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Section 3: Rewards */}
+          <div className={`bg-white border rounded-2xl transition-all shadow-xs overflow-hidden ${
+            expandedSections.rewards ? 'border-slate-200 shadow-sm' : 'border-slate-100 hover:border-slate-200'
+          }`}>
+            <div
+              onClick={() => toggleSection('rewards')}
+              className="p-4 sm:p-5 flex items-center justify-between cursor-pointer select-none bg-slate-50/20"
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+                  expandedSections.rewards ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  <DollarSign className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-slate-800">Campaign Rewards</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Determine payout structure and agent commission splits</p>
+                </div>
+              </div>
+              <div className="p-1 rounded-full text-slate-400">
+                {expandedSections.rewards ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+              </div>
+            </div>
+
+            <AnimatePresence initial={false}>
+              {expandedSections.rewards && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div className="p-4 sm:p-6 border-t border-slate-50 space-y-6">
+                    {/* Base Reward */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                        Base Member Payout (₹) <span className="text-rose-500">*</span>
+                      </label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={rewardAmount}
+                        onChange={(e) => {
+                          setRewardAmount(Number(e.target.value));
+                          if (validationErrors.rewardAmount) {
+                            setValidationErrors(prev => {
+                              const updated = { ...prev };
+                              delete updated.rewardAmount;
+                              return updated;
+                            });
+                          }
+                        }}
+                        onFocus={handleFocus}
+                        leftIcon={<DollarSign className="w-4 h-4 text-emerald-600" />}
+                        className={`h-11 rounded-xl text-base font-black font-mono ${
+                          validationErrors.rewardAmount ? 'border-rose-300 bg-rose-50/20' : 'border-slate-200'
+                        }`}
+                      />
+                      {validationErrors.rewardAmount && (
+                        <p className="text-xs text-rose-500 font-semibold">{validationErrors.rewardAmount}</p>
+                      )}
+                      <p className="text-[11px] text-slate-400">
+                        The exact amount credited directly to the member wallet when their uploaded screenshot is approved.
+                      </p>
+                    </div>
+
+                    {/* DynamicPricings / Commission Separation Grid */}
+                    <div className="space-y-3">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+                        Network Commission Grid Preview
+                      </span>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                        <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 flex flex-col justify-between">
+                          <div className="space-y-0.5">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase block tracking-wider">Completed Member</span>
+                            <span className="text-lg font-black text-slate-800 font-mono">₹{rewardAmount || 0}</span>
+                          </div>
+                          <span className="text-[10px] text-slate-500 mt-2 block leading-relaxed">
+                            Complete base reward value paid to the active sub-member.
+                          </span>
+                        </div>
+
+                        <div className="p-3.5 rounded-xl bg-indigo-50/40 border border-indigo-100/60 flex flex-col justify-between">
+                          <div className="space-y-0.5 flex items-start justify-between gap-1">
+                            <div>
+                              <span className="text-[10px] font-bold text-indigo-500 uppercase block tracking-wider">Team Leader</span>
+                              <span className="text-lg font-black text-indigo-700 font-mono">Confidential</span>
+                            </div>
+                            <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 font-bold text-[9px] uppercase tracking-wider px-1.5 py-0 border-none shrink-0">
+                              Confidential
+                            </Badge>
+                          </div>
+                          <span className="text-[10px] text-indigo-600/80 mt-2 block leading-relaxed">
+                            Commission overrides resolved automatically upon leader assignment.
+                          </span>
+                        </div>
+
+                        <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 flex flex-col justify-between">
+                          <div className="space-y-0.5">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase block tracking-wider">Sub-Team Share</span>
+                            <span className="text-lg font-bold text-slate-600 font-mono">Calculated</span>
+                          </div>
+                          <span className="text-[10px] text-slate-500 mt-2 block leading-relaxed">
+                            Proportional splits applied in accordance to specific sub-network settings.
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Operational Integrity Callout */}
+                    <div className="p-4 bg-slate-50 border border-slate-150 rounded-2xl flex items-start gap-3 text-xs text-slate-600">
+                      <Info className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <span className="font-bold text-slate-800">Operational Integrity Statement</span>
+                        <p className="leading-relaxed">
+                          To protect agency margins and maintain operational network structures, all leader commissions and administrative overrides are held securely on the server-side. They are never exposed to or downloadable by any general platform users.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Section 4: Assignment */}
+          <div className={`bg-white border rounded-2xl transition-all shadow-xs overflow-hidden ${
+            expandedSections.assignment ? 'border-slate-200 shadow-sm' : 'border-slate-100 hover:border-slate-200'
+          }`}>
+            <div
+              onClick={() => toggleSection('assignment')}
+              className="p-4 sm:p-5 flex items-center justify-between cursor-pointer select-none bg-slate-50/20"
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+                  expandedSections.assignment ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-slate-800">Team Assignment</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Configure campaign access: Global or whitelisted Team Leaders</p>
+                </div>
+              </div>
+              <div className="p-1 rounded-full text-slate-400">
+                {expandedSections.assignment ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+              </div>
+            </div>
+
+            <AnimatePresence initial={false}>
+              {expandedSections.assignment && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div className="p-4 sm:p-6 border-t border-slate-50 space-y-6">
+                    {/* Segmented Dual Buttons */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAssignmentType('all');
+                          setValidationErrors(prev => {
+                            const updated = { ...prev };
+                            delete updated.assignment;
+                            return updated;
+                          });
+                        }}
+                        className={`p-4 rounded-xl border text-left transition-all relative ${
+                          assignmentType === 'all'
+                            ? 'border-slate-950 bg-slate-950/5 ring-1 ring-slate-950'
+                            : 'border-slate-150 bg-slate-50/50 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <Users className={`w-5 h-5 ${assignmentType === 'all' ? 'text-slate-900' : 'text-slate-400'}`} />
+                          {assignmentType === 'all' && (
+                            <Badge className="bg-slate-900 text-white rounded-md text-[9px] px-1.5 py-0 uppercase">
+                              Active
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="font-bold text-slate-900 block mt-2.5 text-sm">Global Assignment</span>
+                        <span className="text-[11px] text-slate-500 mt-1 block leading-relaxed">
+                          Accessible immediately by all active sub-teams and user networks. Recommend for standard tasks.
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setAssignmentType('leaders')}
+                        className={`p-4 rounded-xl border text-left transition-all relative ${
+                          assignmentType === 'leaders'
+                            ? 'border-slate-950 bg-slate-950/5 ring-1 ring-slate-950'
+                            : 'border-slate-150 bg-slate-50/50 hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <UserCheck className={`w-5 h-5 ${assignmentType === 'leaders' ? 'text-slate-900' : 'text-slate-400'}`} />
+                          {assignmentType === 'leaders' && (
+                            <Badge className="bg-emerald-600 text-white rounded-md text-[9px] px-1.5 py-0 uppercase border-none">
+                              Active
+                            </Badge>
+                          )}
+                        </div>
+                        <span className="font-bold text-slate-900 block mt-2.5 text-sm">Selected Team Leaders</span>
+                        <span className="text-[11px] text-slate-500 mt-1 block leading-relaxed">
+                          Restrict access strictly to whitelisted leaders. Ideal for higher reward payout runs.
+                        </span>
+                      </button>
+                    </div>
+
+                    {/* Whitelisted Leaders selection panels */}
+                    {assignmentType === 'leaders' && (
+                      <div className="space-y-4 pt-4 border-t border-slate-100 animate-in fade-in duration-200">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+                            Configure Team Leader Whitelist
+                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setAssignedLeaderIds([])}
+                              disabled={assignedLeaderIds.length === 0}
+                              className="text-xs font-semibold px-2 py-1 h-7 text-slate-500 hover:text-rose-600"
+                            >
+                              Clear All
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                const allIds = teamLeaders.map(l => l.uid);
+                                setAssignedLeaderIds(allIds);
+                              }}
+                              className="text-xs font-semibold px-2 py-1 h-7 text-slate-800"
+                            >
+                              Select All
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Search & Counter Info */}
+                        <div className="flex items-center gap-3">
+                          <div className="relative flex-1">
+                            <Input
+                              placeholder="Search whitelisted leaders by name, code..."
+                              value={leaderSearchQuery}
+                              onChange={(e) => setLeaderSearchQuery(e.target.value)}
+                              leftIcon={<Search className="w-4 h-4 text-slate-400" />}
+                              className="h-10 rounded-xl text-sm border-slate-200 bg-slate-50 focus:bg-white transition-all pl-10"
+                            />
+                            {leaderSearchQuery && (
+                              <button
+                                onClick={() => setLeaderSearchQuery('')}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                          <Badge variant="outline" className="font-mono font-bold text-xs bg-slate-50 px-2.5 py-1.5 border-slate-200 h-10 flex items-center justify-center text-slate-700 rounded-xl shrink-0">
+                            {selectedLeadersCount} / {teamLeaders.length} Selected
+                          </Badge>
+                        </div>
+
+                        {validationErrors.assignment && (
+                          <p className="text-xs text-rose-500 font-semibold">{validationErrors.assignment}</p>
+                        )}
+
+                        {/* Leaders Scroll Area */}
+                        <div className="border border-slate-150 rounded-2xl overflow-hidden bg-slate-50/50">
+                          <div className="max-h-60 overflow-y-auto p-2 space-y-1.5 custom-scrollbar">
+                            {isLoadingLeaders ? (
+                              <div className="py-8 flex flex-col items-center justify-center gap-2">
+                                <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
+                                <span className="text-xs text-slate-400 font-semibold">Fetching Leader Database...</span>
+                              </div>
+                            ) : filteredLeaders.length === 0 ? (
+                              <div className="py-8 text-center">
+                                <span className="text-xs text-slate-400 font-bold block">No Leaders Found</span>
+                                <span className="text-[11px] text-slate-400 mt-1 block">Try clearing or adjusting your search filter</span>
+                              </div>
+                            ) : (
+                              filteredLeaders.map((leader) => {
+                                const isSelected = assignedLeaderIds.includes(leader.uid);
+                                return (
+                                  <div
+                                    key={leader.uid}
+                                    onClick={() => {
+                                      setAssignedLeaderIds((prev) =>
+                                        isSelected
+                                          ? prev.filter((id) => id !== leader.uid)
+                                          : [...prev, leader.uid]
+                                      );
+                                      if (validationErrors.assignment) {
+                                        setValidationErrors(prev => {
+                                          const updated = { ...prev };
+                                          delete updated.assignment;
+                                          return updated;
+                                        });
+                                      }
+                                    }}
+                                    className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between transition-all select-none ${
+                                      isSelected
+                                        ? 'border-slate-900 bg-white shadow-xs font-semibold'
+                                        : 'border-slate-100 bg-white/75 hover:bg-white hover:border-slate-200 text-slate-600'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-3">
+                                      <div className={`w-8 h-8 rounded-full border flex items-center justify-center font-black text-xs shrink-0 ${
+                                        isSelected
+                                          ? 'bg-slate-900 border-slate-950 text-white'
+                                          : 'bg-slate-50 border-slate-200 text-slate-600'
+                                      }`}>
+                                        {leader.displayName.charAt(0).toUpperCase()}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p className="text-xs font-bold text-slate-800 truncate block">
+                                          {leader.displayName}
+                                        </p>
+                                        <p className="text-[10px] text-slate-400 font-medium truncate block">
+                                          {leader.email} {leader.leaderCode && `• Code: ${leader.leaderCode}`}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
+                                      isSelected
+                                        ? 'bg-slate-900 border-slate-950 text-white'
+                                        : 'bg-slate-200/50 border-slate-200'
+                                    }`}>
+                                      {isSelected && <Check className="w-3.5 h-3.5 stroke-[3px]" />}
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Assignment Live Summary */}
+                    <div className="p-4 bg-slate-50 border border-slate-150 rounded-2xl space-y-2 text-xs">
+                      <div className="flex items-start gap-2.5">
+                        <Award className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="font-bold text-slate-800 block">Assignment Workspace Summary</span>
+                          <span className="text-slate-600 mt-1 block leading-relaxed">
+                            {assignmentSummaryText}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Section 5: Task Instructions */}
+          <div className={`bg-white border rounded-2xl transition-all shadow-xs overflow-hidden ${
+            expandedSections.instructions ? 'border-slate-200 shadow-sm' : 'border-slate-100 hover:border-slate-200'
+          }`}>
+            <div
+              onClick={() => toggleSection('instructions')}
+              className="p-4 sm:p-5 flex items-center justify-between cursor-pointer select-none bg-slate-50/20"
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+                  expandedSections.instructions ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-slate-800">Task Instructions</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Edit short summary hook and detailed step-by-step guidelines</p>
+                </div>
+              </div>
+              <div className="p-1 rounded-full text-slate-400">
+                {expandedSections.instructions ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+              </div>
+            </div>
+
+            <AnimatePresence initial={false}>
+              {expandedSections.instructions && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div className="p-4 sm:p-6 border-t border-slate-50 space-y-5">
+                    {/* Short Description */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                        Short Campaign Summary Hook
+                      </label>
+                      <Textarea
+                        placeholder="Provide a quick, catchy 1-2 sentence hook explaining why members should complete this app task..."
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        onFocus={handleFocus}
+                        rows={3}
+                        className="text-sm leading-relaxed rounded-xl border-slate-200"
+                      />
+                    </div>
+
+                    {/* Step by Step Instructions */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Step-By-Step Task Instructions
+                        </label>
+                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                          One item per line (1. 2. 3.)
+                        </span>
+                      </div>
+                      <Textarea
+                        placeholder="1. Click download to fetch the app on Play Store.&#10;2. Open and register on the app.&#10;3. Search for the assigned comment and publish it.&#10;4. Upload screenshot of your comment as proof."
+                        value={instructions}
+                        onChange={(e) => setInstructions(e.target.value)}
+                        onFocus={handleFocus}
+                        rows={10}
+                        className="text-sm leading-relaxed font-mono rounded-xl border-slate-200 p-4"
+                      />
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        Each numbered bullet is parsed on the mobile app and rendered as individual interactive checkable steps. Ensure guidelines are clear.
+                      </p>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Section 6: Comments & Capacity */}
+          <div className={`bg-white border rounded-2xl transition-all shadow-xs overflow-hidden ${
+            expandedSections.comments ? 'border-slate-200 shadow-sm' : 'border-slate-100 hover:border-slate-200'
+          }`}>
+            <div
+              onClick={() => toggleSection('comments')}
+              className="p-4 sm:p-5 flex items-center justify-between cursor-pointer select-none bg-slate-50/20"
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+                  expandedSections.comments ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  <MessageSquare className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-slate-800">Comments & Payout Slots</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Toggle comment mode strategy and configure total campaign capacity</p>
+                </div>
+              </div>
+              <div className="p-1 rounded-full text-slate-400">
+                {expandedSections.comments ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+              </div>
+            </div>
+
+            <AnimatePresence initial={false}>
+              {expandedSections.comments && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div className="p-4 sm:p-6 border-t border-slate-50 space-y-6">
+                    {/* Dual Segment Selector */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <button
+                        type="button"
+                        disabled={isLockedByEnrollments}
+                        onClick={() => {
+                          setCommentMode('fixed');
+                          setValidationErrors(prev => {
+                            const updated = { ...prev };
+                            delete updated.comments;
+                            delete updated.hintText;
+                            delete updated.manualSlots;
+                            return updated;
+                          });
+                        }}
+                        className={`p-4 rounded-xl border text-left transition-all relative ${
+                          commentMode === 'fixed'
+                            ? 'border-slate-950 bg-slate-950/5 ring-1 ring-slate-950'
+                            : 'border-slate-150 bg-slate-50/50 hover:bg-slate-50'
+                        } ${isLockedByEnrollments ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <MessageSquare className={`w-5 h-5 ${commentMode === 'fixed' ? 'text-slate-900' : 'text-slate-400'}`} />
+                          {isLockedByEnrollments && <Lock className="w-3.5 h-3.5 text-amber-500" />}
+                        </div>
+                        <span className="font-bold text-slate-900 block mt-2.5 text-sm">Fixed Comments Database</span>
+                        <span className="text-[11px] text-slate-500 mt-1 block leading-relaxed">
+                          Provide exact comment lines. The system assigns unique lines to users. Slot capacity resolves exactly to unique comments entered.
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={isLockedByEnrollments}
+                        onClick={() => {
+                          setCommentMode('hint');
+                          setValidationErrors(prev => {
+                            const updated = { ...prev };
+                            delete updated.comments;
+                            delete updated.hintText;
+                            delete updated.manualSlots;
+                            return updated;
+                          });
+                        }}
+                        className={`p-4 rounded-xl border text-left transition-all relative ${
+                          commentMode === 'hint'
+                            ? 'border-slate-950 bg-slate-950/5 ring-1 ring-slate-950'
+                            : 'border-slate-150 bg-slate-50/50 hover:bg-slate-50'
+                        } ${isLockedByEnrollments ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <PenTool className={`w-5 h-5 ${commentMode === 'hint' ? 'text-slate-900' : 'text-slate-400'}`} />
+                          {isLockedByEnrollments && <Lock className="w-3.5 h-3.5 text-amber-500" />}
+                        </div>
+                        <span className="font-bold text-slate-900 block mt-2.5 text-sm">Freeform Hint Engine</span>
+                        <span className="text-[11px] text-slate-500 mt-1 block leading-relaxed">
+                          Write guidance/rules and let users craft their own reviews. You manually define maximum payout slots for this task.
+                        </span>
+                      </button>
+                    </div>
+
+                    {/* Fixed Database Input strategy */}
+                    {commentMode === 'fixed' ? (
+                      <div className="space-y-4 pt-2 border-t border-slate-100 animate-in fade-in duration-200">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                            Fixed Comment Database <span className="text-rose-500">*</span>
+                          </label>
+                          <Badge variant="outline" className="font-mono font-bold text-xs bg-slate-50 px-2 py-1 border-slate-200">
+                            {commentAnalysis.validComments.length} Unique Payout Slots
+                          </Badge>
+                        </div>
+
+                        <Textarea
+                          disabled={isLockedByEnrollments}
+                          placeholder="Type or paste reviews/comments here...&#10;Paste exactly ONE complete comment per line.&#10;The line count defines total slots automatically."
+                          value={rawCommentsText}
+                          onChange={(e) => {
+                            setRawCommentsText(e.target.value);
+                            if (validationErrors.comments) {
+                              setValidationErrors(prev => {
+                                const updated = { ...prev };
+                                delete updated.comments;
+                                return updated;
+                              });
+                            }
+                          }}
+                          onFocus={handleFocus}
+                          rows={10}
+                          className={`font-mono text-xs leading-normal p-4 rounded-xl ${
+                            validationErrors.comments ? 'border-rose-300 bg-rose-50/20' : 'border-slate-200'
+                          } ${isLockedByEnrollments ? 'bg-slate-50' : ''}`}
+                        />
+
+                        {validationErrors.comments && (
+                          <p className="text-xs text-rose-500 font-semibold">{validationErrors.comments}</p>
+                        )}
+
+                        {/* Duplicates Alert Banner */}
+                        {commentAnalysis.hasDuplicates && (
+                          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 space-y-1 animate-in fade-in duration-150">
+                            <span className="font-bold block">Duplicate Comments Ignored ({commentAnalysis.duplicates.length})</span>
+                            <p className="text-[11px] leading-relaxed">
+                              Lines with identical text have been filtered out automatically to ensure review uniqueness. Only the {commentAnalysis.validComments.length} unique values are used.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      /* Freeform Hint strategies */
+                      <div className="space-y-4 pt-2 border-t border-slate-100 animate-in fade-in duration-200">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                            Hint Guidance / Target Keywords <span className="text-rose-500">*</span>
+                          </label>
+                          <Textarea
+                            disabled={isLockedByEnrollments}
+                            placeholder="e.g. Write a genuine 5-star review. Make sure to use positive keywords such as 'reliable', 'instant deposits', and 'super simple design' in your review."
+                            value={hintText}
+                            onChange={(e) => {
+                              setHintText(e.target.value);
+                              if (validationErrors.hintText) {
+                                setValidationErrors(prev => {
+                                  const updated = { ...prev };
+                                  delete updated.hintText;
+                                  return updated;
+                                });
+                              }
+                            }}
+                            onFocus={handleFocus}
+                            rows={4}
+                            className={`text-sm leading-relaxed rounded-xl ${
+                              validationErrors.hintText ? 'border-rose-300 bg-rose-50/20' : 'border-slate-200'
+                            } ${isLockedByEnrollments ? 'bg-slate-50' : ''}`}
+                          />
+                          {validationErrors.hintText && (
+                            <p className="text-xs text-rose-500 font-semibold">{validationErrors.hintText}</p>
+                          )}
+                          <p className="text-[11px] text-slate-400">
+                            Instructions or ideas given to users when they are drafting their custom reviews.
+                          </p>
+                        </div>
+
+                        {/* Manual Slots */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                            Total Campaign Slot Capacity <span className="text-rose-500">*</span>
+                          </label>
+                          <Input
+                            type="number"
+                            disabled={isLockedByEnrollments}
+                            min={1}
+                            value={manualSlots}
+                            onChange={(e) => {
+                              setManualSlots(Number(e.target.value));
+                              if (validationErrors.manualSlots) {
+                                setValidationErrors(prev => {
+                                  const updated = { ...prev };
+                                  delete updated.manualSlots;
+                                  return updated;
+                                });
+                              }
+                            }}
+                            onFocus={handleFocus}
+                            leftIcon={<Plus className="w-4 h-4 text-slate-400" />}
+                            className={`h-11 rounded-xl text-sm font-mono ${
+                              validationErrors.manualSlots ? 'border-rose-300 bg-rose-50/20' : 'border-slate-200'
+                            }`}
+                          />
+                          {validationErrors.manualSlots && (
+                            <p className="text-xs text-rose-500 font-semibold">{validationErrors.manualSlots}</p>
+                          )}
+                          <p className="text-[11px] text-slate-400">
+                            The maximum total slots of submissions allowed before this task automatically expires.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Section 7: Live Preview (Mobile View Only, Collapsible Card) */}
+          <div className="lg:hidden bg-white border border-slate-150 rounded-2xl transition-all shadow-xs overflow-hidden">
+            <div
+              onClick={() => toggleSection('previewMobile')}
+              className="p-4 flex items-center justify-between cursor-pointer select-none bg-slate-50/20"
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+                  expandedSections.previewMobile ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
+                }`}>
+                  <Eye className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800">Realtime Card Preview</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Toggle live visual representation of this task</p>
+                </div>
+              </div>
+              <div className="p-1 rounded-full text-slate-400">
+                {expandedSections.previewMobile ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+              </div>
+            </div>
+
+            <AnimatePresence initial={false}>
+              {expandedSections.previewMobile && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <div className="p-4 border-t border-slate-50 bg-slate-50/30">
+                    <LiveTaskPreview formData={previewData} />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+
+        {/* Right Column: Desktop Sticky Realtime Preview Widget */}
+        <div className="hidden lg:block lg:col-span-4 sticky top-24">
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-4">
+            <LiveTaskPreview formData={previewData} />
+          </div>
+        </div>
+      </div>
+
+      {/* Floating Sticky Action Control Bar */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-150 pt-3.5 pb-[calc(14px+env(safe-area-inset-bottom))] px-4 z-40 shadow-[0_-5px_25px_rgba(0,0,0,0.06)]">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+          <Button
+            type="button"
+            variant="ghost"
             onClick={() => router.push('/admin/tasks')}
-            disabled={isSubmitting}
+            className="text-slate-600 hover:text-slate-900 font-bold px-4 py-2.5 h-11 rounded-xl text-sm transition-all"
           >
             Cancel
           </Button>
 
-          <Button
-            type="submit"
-            variant="primary"
-            disabled={isSubmitting}
-            leftIcon={
-              isSubmitting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Save className="w-4 h-4" />
-              )
-            }
-          >
-            {isSubmitting
-              ? isEditMode
-                ? 'Updating Task...'
-                : 'Creating Task...'
-              : isEditMode
-              ? 'Save Task Changes'
-              : 'Publish Task Offer'}
-          </Button>
+          <div className="flex items-center gap-2">
+            {!isEditMode ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setStatus('draft');
+                    setTimeout(() => handleSubmit(), 50);
+                  }}
+                  disabled={isSubmitting}
+                  className="border-slate-200 text-slate-700 font-bold px-4.5 py-2.5 h-11 rounded-xl text-sm hover:bg-slate-50 shadow-xxs transition-all"
+                >
+                  Save Draft
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setStatus('active');
+                    setTimeout(() => handleSubmit(), 50);
+                  }}
+                  disabled={isSubmitting}
+                  className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-5.5 py-2.5 h-11 rounded-xl text-sm shadow-sm flex items-center gap-1.5 transition-all"
+                >
+                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Publish Offer
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="button"
+                onClick={handleSubmit}
+                disabled={isSubmitting}
+                className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-6 py-2.5 h-11 rounded-xl text-sm shadow-sm flex items-center gap-1.5 transition-all"
+              >
+                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Update Task
+              </Button>
+            )}
+          </div>
         </div>
-      </form>
-
-      {/* Live Preview Sidebar (5 cols) */}
-      <div className="lg:col-span-5">
-        <LiveTaskPreview formData={previewData} />
       </div>
     </div>
   );

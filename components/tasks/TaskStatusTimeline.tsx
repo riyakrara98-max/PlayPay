@@ -1,9 +1,10 @@
 'use client';
 
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { Check, Clock, AlertCircle, ShieldCheck, FileCheck } from 'lucide-react';
 import { EnrollmentStatus } from '@/types/firestore';
+import { parseDateInput, formatDate } from '@/utils/formatters';
 
 interface TaskStatusTimelineProps {
   status: EnrollmentStatus;
@@ -29,7 +30,7 @@ export function TaskStatusTimeline({
   const formatDate = (isoString?: string | null) => {
     if (!isoString) return '';
     try {
-      const d = new Date(isoString);
+      const d = (parseDateInput(isoString) || new Date());
       return d.toLocaleDateString('en-IN', {
         day: 'numeric',
         month: 'short',

@@ -170,16 +170,27 @@ export function useUploadScreenshot(initialUrl?: string | null): UseUploadScreen
 
           if (xhr.status >= 200 && xhr.status < 300) {
             try {
-              const response = JSON.parse(xhr.responseText);
+              let response: { url?: string; publicId?: string; metadata?: CloudinaryMetadata; error?: string };
+              try {
+                response = JSON.parse(xhr.responseText);
+              } catch {
+                throw new Error('Upload verification failed: Server returned an invalid response format.');
+              }
+
+              if (response.error) {
+                throw new Error(response.error);
+              }
+
               const url = response.url;
-              const publicId = response.publicId;
+              const publicId = response.publicId || '';
               const metadata: CloudinaryMetadata = response.metadata || {
                 public_id: publicId,
-                secure_url: url,
+                secure_url: url || '',
               };
 
-              // Strict Rule 1 Verification on Client
-              if (!url || typeof url !== 'string' || !url.startsWith('https://')) {
+              // Strict Rule 1 Verification on Client (must be valid HTTPS URL)
+              const isValidUrl = url && typeof url === 'string' && url.startsWith('https://');
+              if (!isValidUrl) {
                 throw new Error('Upload verification failed: Security requirement HTTPS not met.');
               }
 
@@ -197,7 +208,7 @@ export function useUploadScreenshot(initialUrl?: string | null): UseUploadScreen
               resolve({ url, publicId, metadata });
             } catch (e: unknown) {
               const msg = e instanceof Error ? e.message : 'Failed to process server upload response.';
-              console.error('Upload verification error:', e);
+              console.error('Upload verification error:', msg);
               setError(msg);
               toast({
                 title: 'Upload Verification Failed',

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { getSafeTime } from '@/utils/formatters';
 
 export interface TimeLeft {
   days: number;
@@ -17,7 +18,7 @@ export function useCountdown(expiresAt?: string): TimeLeft {
       return { days: 0, hours: 0, minutes: 0, seconds: 0, isExpired: false, formatted: '' };
     }
 
-    const target = new Date(expiresAt).getTime();
+    const target = getSafeTime(expiresAt);
     const now = new Date().getTime();
     const difference = target - now;
 

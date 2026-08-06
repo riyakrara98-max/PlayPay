@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { TaskCategory, CommentMode, TaskStatus } from '@/types/firestore';
 import { Badge } from '@/components/ui/badge';
+import { parseDateInput } from '@/utils/formatters';
 
 export interface TaskFormData {
   title: string;
@@ -51,7 +52,7 @@ export function LiveTaskPreview({ formData }: LiveTaskPreviewProps) {
   let expiryDisplay = 'No Expiry';
   if (formData.expiresAt) {
     try {
-      const expDate = new Date(formData.expiresAt);
+      const expDate = (parseDateInput(formData.expiresAt) || new Date());
       if (!isNaN(expDate.getTime())) {
         expiryDisplay = expDate.toLocaleDateString('en-IN', {
           day: 'numeric',

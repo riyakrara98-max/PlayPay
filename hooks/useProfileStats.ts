@@ -5,7 +5,7 @@ import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { getFirebaseDb } from '@/firebase/config';
 import { EnrollmentDocument, FIRESTORE_COLLECTIONS } from '@/types/firestore';
-import { handleFirestoreError, OperationType } from '@/lib/firebase-errors';
+import { logFirestoreError, OperationType } from '@/lib/firebase-errors';
 
 export interface ProfileStats {
   tasksCompleted: number;
@@ -55,7 +55,7 @@ export function useProfileStats(): UseProfileStatsReturn {
         console.error('[useProfileStats Error]', err);
         setError('Failed to fetch profile stats from Firestore.');
         setLoading(false);
-        handleFirestoreError(
+        logFirestoreError(
           err,
           OperationType.LIST,
           FIRESTORE_COLLECTIONS.ENROLLMENTS

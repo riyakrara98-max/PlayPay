@@ -1,4 +1,5 @@
 export type UserRole = 'user' | 'admin';
+export type MemberType = 'pending' | 'direct' | 'team_member' | 'team_leader' | 'admin';
 
 export interface UserDocument {
   uid: string;
@@ -13,7 +14,15 @@ export interface UserDocument {
   ifscCode?: string | null;
   lastProfileUpdateAt?: string | null;
   role: UserRole;
+  memberType?: MemberType;
+  leaderId?: string;
+  rewardResolvedAt?: string;
+  leaderCode?: string;
+  profileCompleted?: boolean;
   createdAt: string;
+  _resolvedLeaderRewardAmount?: number | null;
+  _resolvedAssignmentId?: string;
+  _resolvedBaseReward?: number;
   lastLoginAt: string;
   isActive: boolean;
   isBanned: boolean;
@@ -27,6 +36,10 @@ export interface UserDocument {
   rejectedTasksCount?: number;
   weeklyStreak?: number;
   lastTaskCompletedAt?: string | null;
+  effectiveReward?: number | null;
+  isLeaderActive?: boolean;
+  teamMemberCount?: number;
+  teamLeaderCode?: string;
 }
 
 export type TaskStatus = 'active' | 'paused' | 'completed' | 'draft';
@@ -40,6 +53,9 @@ export type TaskCategory =
 export type TaskProofType = 'screenshot' | 'text' | 'both';
 
 export type CommentMode = 'fixed' | 'hint' | 'none';
+export type ReenrollmentPolicy = 'cooldown' | 'none';
+export type TaskAssignmentType = 'all' | 'leaders';
+export type AssignmentStatus = 'active' | 'paused' | 'removed';
 
 export interface TaskDocument {
   id: string;
@@ -54,6 +70,8 @@ export interface TaskDocument {
   proofType?: TaskProofType;
   appName?: string;
   appIcon?: string;
+  appIconUrl?: string;
+  packageName?: string;
   playStoreUrl?: string;
   appUrl?: string;
   hint?: string;
@@ -63,9 +81,33 @@ export interface TaskDocument {
   expiresAt?: string;
   commentMode?: CommentMode;
   comments?: string[];
+  reenrollmentPolicy?: ReenrollmentPolicy;
+  cooldownDays?: number;
+  assignmentType?: TaskAssignmentType;
+  assignedLeaderIds?: string[];
+  baseReward?: number | null;
   createdBy: string;
   createdAt: string;
+  _resolvedLeaderRewardAmount?: number | null;
+  _resolvedAssignmentId?: string;
+  _resolvedBaseReward?: number;
   updatedAt: string;
+}
+
+export interface LeaderTaskAssignmentDocument {
+  id: string; // {taskId}_{leaderId}
+  taskId: string;
+  leaderId: string;
+  leaderReward: number | null;
+  assignmentStatus?: AssignmentStatus;
+  status?: 'active' | 'inactive';
+  assignedAt: string;
+  assignedBy: string;
+  updatedAt: string;
+  removedAt?: string | null;
+  removedBy?: string | null;
+  rewardConfiguredAt?: string | null;
+  rewardConfiguredBy?: string | null;
 }
 
 export type EnrollmentStatus = 'pending' | 'approved' | 'rejected';
@@ -93,10 +135,16 @@ export interface EnrollmentDocument {
   userAvatar?: string;
   appName?: string;
   appIcon?: string;
+  packageName?: string;
   taskTitle?: string;
   category?: TaskCategory;
   reward?: number;
   rewardAmount?: number;
+  leaderRewardAmount?: number | null;
+  baseReward?: number;
+  assignmentId?: string;
+  leaderId?: string;
+  rewardResolvedAt?: string;
   assignedComment?: string;
   commentIndex?: number | null;
   status: EnrollmentStatus;
@@ -164,7 +212,25 @@ export type AuditActivityType =
   | 'Task Created'
   | 'Task Updated'
   | 'Task Deleted'
-  | 'Settings Updated';
+  | 'Settings Updated'
+  | 'Team Leader Saved'
+  | 'Member Reward Updated'
+  | 'Member Assigned'
+  | 'Member Unassigned'
+  | 'Team Leader Status Updated'
+  | 'Team Leader Enabled'
+  | 'Team Leader Disabled'
+  | 'Member Reward Configured'
+  | 'Bulk Member Rewards Updated';
+
+export interface LeaderCodeDocument {
+  leaderId: string;
+  leaderCode: string;
+  memberType?: string;
+  isLeaderActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 export interface AdminActivityDocument {
   id: string;
@@ -180,6 +246,9 @@ export interface AdminActivityDocument {
   before?: Record<string, unknown> | null;
   after?: Record<string, unknown> | null;
   createdAt: string;
+  _resolvedLeaderRewardAmount?: number | null;
+  _resolvedAssignmentId?: string;
+  _resolvedBaseReward?: number;
   timestamp?: string;
   ipAddress?: string;
   userAgent?: string;
@@ -187,10 +256,12 @@ export interface AdminActivityDocument {
 
 export const FIRESTORE_COLLECTIONS = {
   USERS: 'users',
+  LEADER_CODES: 'leaderCodes',
   TASKS: 'tasks',
   ENROLLMENTS: 'enrollments',
   SITE_SETTINGS: 'siteSettings',
   ADMIN_ACTIVITY: 'adminActivity',
+  LEADER_TASK_ASSIGNMENTS: 'leaderTaskAssignments',
 } as const;
 
 export type FirestoreCollectionName =

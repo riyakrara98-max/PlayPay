@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { PageContainer } from '@/components/layout/PageContainer';
+
 
 export default function ErrorPage({
   error,
@@ -19,7 +19,7 @@ export default function ErrorPage({
   }, [error]);
 
   return (
-    <PageContainer size="md" className="min-h-[80vh] flex items-center justify-center">
+    <div className="min-h-[80vh] flex items-center justify-center">
       <Card variant="elevated" className="w-full p-8 text-center flex flex-col items-center gap-6">
         <div className="w-16 h-16 rounded-2xl bg-[var(--danger)]/10 text-[var(--danger)] flex items-center justify-center shadow-xs">
           <AlertTriangle className="w-8 h-8" />
@@ -62,6 +62,6 @@ export default function ErrorPage({
           </Button>
         </div>
       </Card>
-    </PageContainer>
+    </div>
   );
 }

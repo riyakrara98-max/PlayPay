@@ -2,16 +2,19 @@
 
 import { useState, useEffect } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
-import { getFirebaseDb, isFirebaseConfigured } from '@/firebase/config';
-import { handleFirestoreError, OperationType } from '@/lib/firebase-errors';
+import { getFirebaseDb } from '@/firebase/config';
+import { logFirestoreError, OperationType } from '@/lib/firebase-errors';
 
 export function useRealtimeDocument<T>(collectionName: string, docId: string | null) {
   const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState<boolean>(() => Boolean(docId && isFirebaseConfigured()));
+  const [loading, setLoading] = useState<boolean>(() => Boolean(docId));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!docId || !isFirebaseConfigured()) return;
+    if (!docId) {
+      setLoading(false);
+      return;
+    }
 
     const path = `${collectionName}/${docId}`;
 
@@ -32,7 +35,7 @@ export function useRealtimeDocument<T>(collectionName: string, docId: string | n
         (err) => {
           setError(err.message);
           setLoading(false);
-          handleFirestoreError(err, OperationType.GET, path);
+          logFirestoreError(err, OperationType.GET, path);
         }
       );
 
@@ -48,3 +51,4 @@ export function useRealtimeDocument<T>(collectionName: string, docId: string | n
 
   return { data, loading, error };
 }
+

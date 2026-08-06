@@ -1,4 +1,5 @@
 import { TaskDocument } from '@/types/firestore';
+import { getSafeTime } from '@/utils/formatters';
 
 export type ComputedTaskStatus = 'available' | 'almost_full' | 'full' | 'expired';
 
@@ -14,6 +15,20 @@ export interface TaskAvailabilityInfo {
   isButtonDisabled: boolean;
 }
 
+export function isTaskExpired(task: TaskDocument): boolean {
+  const expiryRaw = task.expiresAt || (task as unknown as Record<string, unknown>).expiryAt;
+  if (!expiryRaw) return false;
+  const expiryMs = getSafeTime(expiryRaw);
+  if (isNaN(expiryMs)) return false;
+  return Date.now() >= expiryMs;
+}
+
+export function isTaskAvailable(task: TaskDocument): boolean {
+  if (task.status !== 'active') return false;
+  if (isTaskExpired(task)) return false;
+  return true;
+}
+
 export function calculateTaskAvailability(
   task: TaskDocument,
   isEnrolled: boolean = false
@@ -23,9 +38,7 @@ export function calculateTaskAvailability(
   const remainingSlots = Math.max(0, totalSlots - enrolledCount);
   const progressPercent = Math.min(100, Math.round((enrolledCount / totalSlots) * 100));
 
-  const isExpired = Boolean(
-    task.expiresAt && !isNaN(new Date(task.expiresAt).getTime()) && new Date(task.expiresAt).getTime() <= Date.now()
-  );
+  const isExpired = isTaskExpired(task);
 
   const isFull = remainingSlots <= 0;
 

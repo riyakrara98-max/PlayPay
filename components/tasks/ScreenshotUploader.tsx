@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   UploadCloud,
   CheckCircle2,
@@ -54,9 +54,15 @@ export function ScreenshotUploader({
     setIsDragOver(false);
   };
 
+  const onUploadCompleteRef = useRef(onUploadComplete);
+  onUploadCompleteRef.current = onUploadComplete;
+
+  const lastNotifiedUrlRef = useRef<string | null>(fileInfo?.uploadedUrl || null);
+
   const handleRemove = () => {
+    lastNotifiedUrlRef.current = null;
     removeImage();
-    onUploadComplete(null);
+    onUploadCompleteRef.current(null);
   };
 
   const triggerSelect = () => {
@@ -68,13 +74,18 @@ export function ScreenshotUploader({
   // Synchronize upload result when upload succeeds
   React.useEffect(() => {
     if (fileInfo?.uploadedUrl && fileInfo.metadata) {
-      onUploadComplete({
-        url: fileInfo.uploadedUrl,
-        publicId: fileInfo.publicId || '',
-        metadata: fileInfo.metadata,
-      });
+      if (lastNotifiedUrlRef.current !== fileInfo.uploadedUrl) {
+        lastNotifiedUrlRef.current = fileInfo.uploadedUrl;
+        onUploadCompleteRef.current({
+          url: fileInfo.uploadedUrl,
+          publicId: fileInfo.publicId || '',
+          metadata: fileInfo.metadata,
+        });
+      }
+    } else if (!fileInfo && lastNotifiedUrlRef.current !== null) {
+      lastNotifiedUrlRef.current = null;
     }
-  }, [fileInfo?.uploadedUrl, fileInfo?.metadata, fileInfo?.publicId, onUploadComplete]);
+  }, [fileInfo]);
 
   return (
     <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-5 shadow-xs mb-6">

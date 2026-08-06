@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   CheckSquare,
   Search,
@@ -24,6 +24,7 @@ import { useRealtimeCollection } from '@/hooks/useRealtimeCollection';
 import { EnrollmentDocument, FIRESTORE_COLLECTIONS } from '@/types/firestore';
 import { MyTaskCard } from '@/components/tasks/MyTaskCard';
 import { TaskGridSkeleton } from '@/components/tasks/TaskCardSkeleton';
+import { getSafeTime } from '@/utils/formatters';
 
 type FilterTab = 'all' | 'enrolled' | 'submitted' | 'approved' | 'rejected';
 
@@ -56,8 +57,8 @@ export default function MyTasksPage() {
 
     // Sort newest first
     list.sort((a, b) => {
-      const timeA = a.enrolledAt ? new Date(a.enrolledAt).getTime() : 0;
-      const timeB = b.enrolledAt ? new Date(b.enrolledAt).getTime() : 0;
+      const timeA = a.enrolledAt ? getSafeTime(a.enrolledAt) : 0;
+      const timeB = b.enrolledAt ? getSafeTime(b.enrolledAt) : 0;
       return timeB - timeA;
     });
 

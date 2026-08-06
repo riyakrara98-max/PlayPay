@@ -37,10 +37,6 @@ export default function AdminSecurityPage() {
 
     const start = performance.now();
     try {
-      if (!isFirebaseConfigured()) {
-        setFirestoreStatus('error');
-        return;
-      }
       const db = getFirebaseDb();
       // Test read ping to siteSettings/global doc
       const ref = doc(db, 'siteSettings', 'global');
@@ -75,7 +71,7 @@ export default function AdminSecurityPage() {
         {/* Top Health Header Bar */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 rounded-xl bg-[var(--bg-muted)] border border-[var(--border)]">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center border border-emerald-500/20">
+            <div className="w-10 h-10 rounded-xl bg-[var(--success)]/10 text-[var(--success)] flex items-center justify-center border border-[var(--success)]/20">
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
@@ -106,7 +102,7 @@ export default function AdminSecurityPage() {
           <Card className="p-4 space-y-3 border-[var(--border)] bg-[var(--card)]">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-bold text-[var(--text-primary)]">
-                <Database className="w-4 h-4 text-emerald-500" /> Firestore Database
+                <Database className="w-4 h-4 text-[var(--success)]" /> Firestore Database
               </div>
               <Badge
                 variant={firestoreStatus === 'connected' ? 'success' : firestoreStatus === 'testing' ? 'warning' : 'danger'}
@@ -125,7 +121,7 @@ export default function AdminSecurityPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-[var(--text-secondary)]">Security Rules:</span>
-                <span className="text-emerald-500 font-bold">Strict Firestore v2</span>
+                <span className="text-[var(--success)] font-bold">Strict Firestore v2</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[var(--text-secondary)]">Read/Write Mode:</span>
@@ -213,7 +209,7 @@ export default function AdminSecurityPage() {
               <div>
                 <p className="font-bold text-[var(--text-primary)]">Role-Based Access Control (RBAC)</p>
                 <p className="text-[11px] text-[var(--text-secondary)]">
-                  Strict security rules verify <code className="font-mono text-amber-500">role == 'admin'</code> before granting write privileges across all collections.
+                  Strict security rules verify <code className="font-mono text-amber-500">role == &apos;admin&apos;</code> before granting write privileges across all collections.
                 </p>
               </div>
             </div>

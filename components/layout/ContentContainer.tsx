@@ -17,9 +17,9 @@ export function ContentContainer({
 }: ContentContainerProps) {
   const variantClasses = {
     flat: 'bg-transparent',
-    card: 'bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] p-4 sm:p-6 shadow-xs',
-    elevated: 'bg-[var(--surface-elevated)] border border-[var(--border)] rounded-[var(--radius-xl)] p-4 sm:p-6 shadow-sm',
-    glass: 'bg-[var(--surface)]/80 backdrop-blur-md border border-[var(--border)] rounded-[var(--radius-xl)] p-4 sm:p-6',
+    card: 'bg-[var(--surface)] border border-[var(--hairline)] rounded-[var(--radius-lg)] p-6 md:p-8 shadow-sm',
+    elevated: 'bg-[var(--canvas-soft)] border border-[var(--hairline)] rounded-[var(--radius-lg)] p-6 md:p-8 shadow-md',
+    glass: 'bg-[var(--surface)]/80 backdrop-blur-md border border-[var(--hairline)] rounded-[var(--radius-lg)] p-6 md:p-8',
   };
 
   return (

@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { getFirebaseDb } from '@/firebase/config';
 import { FIRESTORE_COLLECTIONS, UserDocument } from '@/types/firestore';
 import { validateFullProfileForm, ProfileFormValues, ProfileFormErrors } from '@/lib/profile-validation';
-import { handleFirestoreError, OperationType } from '@/lib/firebase-errors';
+import { logFirestoreError, OperationType } from '@/lib/firebase-errors';
 
 export interface UseUpdateProfileReturn {
   updateProfile: (
@@ -58,15 +58,14 @@ export function useUpdateProfile(): UseUpdateProfileReturn {
 
       setUpdating(true);
 
-      const timestamp = new Date().toISOString();
-      const updatedFields: Partial<UserDocument> = {
+      const updatedFields: Record<string, unknown> = {
         phoneNumber: values.phoneNumber.trim(),
         upiId: values.upiId.trim(),
         bankName: values.bankName.trim(),
         accountHolder: values.accountHolder.trim(),
         accountNumber: values.accountNumber.trim(),
         ifscCode: values.ifscCode.trim().toUpperCase(),
-        lastProfileUpdateAt: timestamp,
+        lastProfileUpdateAt: serverTimestamp(),
       };
 
       // Apply Optimistic Update if callback provided
@@ -86,7 +85,7 @@ export function useUpdateProfile(): UseUpdateProfileReturn {
         setGeneralError('Failed to update profile. Changes have been rolled back.');
         setUpdating(false);
 
-        handleFirestoreError(
+        logFirestoreError(
           err,
           OperationType.UPDATE,
           `${FIRESTORE_COLLECTIONS.USERS}/${currentUser.uid}`

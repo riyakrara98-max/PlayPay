@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import {
   User,
   onAuthStateChanged,
@@ -13,10 +13,10 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
-import { getFirebaseAuth, getFirebaseDb, isFirebaseConfigured } from '@/firebase/config';
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { getFirebaseAuth, getFirebaseDb } from '@/firebase/config';
 import { UserDocument, FIRESTORE_COLLECTIONS } from '@/types/firestore';
-import { mapAuthError, handleFirestoreError, OperationType } from '@/lib/firebase-errors';
+import { mapAuthError, logFirestoreError, OperationType } from '@/lib/firebase-errors';
 
 export interface AuthContextType {
   currentUser: User | null;
@@ -41,12 +41,21 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserDocument | null>(null);
-  const [loading, setLoading] = useState<boolean>(() => isFirebaseConfigured());
-  const [initialized, setInitialized] = useState<boolean>(() => !isFirebaseConfigured());
+  const [loading, setLoading] = useState<boolean>(true);
+  const [initialized, setInitialized] = useState<boolean>(false);
+
+  const refreshPromiseRef = useRef<Promise<void> | null>(null);
 
   // Helper to fetch or initialize user profile document in Firestore
   const syncUserProfile = useCallback(async (firebaseUser: User): Promise<UserDocument | null> => {
     try {
+      const auth = getFirebaseAuth();
+      const activeUser = auth.currentUser;
+      if (!firebaseUser || !activeUser || activeUser.uid !== firebaseUser.uid) {
+        console.warn('[syncUserProfile] Skipped: Firebase Auth not ready or user mismatch');
+        return null;
+      }
+
       const db = getFirebaseDb();
       const userRef = doc(db, FIRESTORE_COLLECTIONS.USERS, firebaseUser.uid);
       const snap = await getDoc(userRef);
@@ -55,76 +64,128 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       if (snap.exists()) {
         const data = snap.data() as UserDocument;
-        // Update last login timestamp
+        // Construct updated profile
         const updatedProfile: UserDocument = {
           ...data,
+          memberType: data.memberType ?? 'direct',
+          leaderId: data.leaderId ?? '',
+          leaderCode: data.leaderCode ?? '',
+          profileCompleted: data.profileCompleted ?? true,
           lastLoginAt: now,
           email: firebaseUser.email || data.email,
           displayName: firebaseUser.displayName || data.displayName,
           photoURL: firebaseUser.photoURL || data.photoURL,
         };
 
-        try {
-          await updateDoc(userRef, {
-            lastLoginAt: now,
-            email: updatedProfile.email,
-            displayName: updatedProfile.displayName,
-            photoURL: updatedProfile.photoURL,
-          });
-        } catch {
-          // Non-blocking update failure
-        }
+        // Safely update lastLoginAt after current microtask/call-stack to avoid racing auth transitions
+        setTimeout(() => {
+          const currentAuth = getFirebaseAuth();
+          if (currentAuth.currentUser && currentAuth.currentUser.uid === firebaseUser.uid) {
+            updateDoc(userRef, {
+              lastLoginAt: serverTimestamp(),
+              email: updatedProfile.email,
+              displayName: updatedProfile.displayName,
+              photoURL: updatedProfile.photoURL,
+            }).catch(() => {});
+          }
+        }, 1000);
 
         return updatedProfile;
       } else {
         // Auto-create missing profile
-        const newProfile: UserDocument = {
+        const newProfile: Record<string, unknown> = {
           uid: firebaseUser.uid,
           email: firebaseUser.email || '',
           displayName: firebaseUser.displayName || null,
           photoURL: firebaseUser.photoURL || null,
           role: 'user',
-          createdAt: now,
-          lastLoginAt: now,
+          memberType: 'pending',
+          leaderId: '',
+          leaderCode: '',
+          profileCompleted: false,
+          createdAt: serverTimestamp(),
+          lastLoginAt: serverTimestamp(),
           isActive: true,
           isBanned: false,
         };
 
         await setDoc(userRef, newProfile);
-        return newProfile;
+        return newProfile as unknown as UserDocument;
       }
     } catch (error) {
-      handleFirestoreError(
+      logFirestoreError(
         error,
         OperationType.GET,
-        `${FIRESTORE_COLLECTIONS.USERS}/${firebaseUser.uid}`
+        `${FIRESTORE_COLLECTIONS.USERS}/${firebaseUser?.uid || 'unknown'}`
       );
-      return null;
+      if (!firebaseUser?.uid) return null;
+      // Construct fallback profile when offline or network error occurs
+      const now = new Date().toISOString();
+      const fallbackProfile: UserDocument = {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email || '',
+        displayName: firebaseUser.displayName || null,
+        photoURL: firebaseUser.photoURL || null,
+        role: 'user',
+        memberType: 'direct',
+        leaderId: '',
+        leaderCode: '',
+        profileCompleted: true,
+        createdAt: now,
+        lastLoginAt: now,
+        isActive: true,
+        isBanned: false,
+      };
+      return fallbackProfile;
     }
   }, []);
 
-  // Manual refresh profile trigger
-  const refreshProfile = useCallback(async () => {
-    if (!currentUser) {
-      setUserProfile(null);
+  // Manual refresh profile trigger with deduplication
+  const refreshProfile = useCallback(async (): Promise<void> => {
+    const auth = getFirebaseAuth();
+    const activeAuthUser = auth.currentUser || currentUser;
+
+    if (!activeAuthUser || !auth.currentUser) {
+      if (!activeAuthUser) {
+        setUserProfile(null);
+      }
       return;
     }
-    setLoading(true);
-    try {
-      const profile = await syncUserProfile(currentUser);
-      setUserProfile(profile);
-    } finally {
-      setLoading(false);
+
+    if (refreshPromiseRef.current) {
+      return refreshPromiseRef.current;
     }
+
+    const promise = (async () => {
+      setLoading(true);
+      try {
+        const profile = await syncUserProfile(activeAuthUser);
+        if (profile) {
+          setUserProfile(profile);
+        }
+      } catch (err) {
+        console.warn('[refreshProfile] Error during profile refresh:', err);
+      } finally {
+        setLoading(false);
+        refreshPromiseRef.current = null;
+      }
+    })();
+
+    refreshPromiseRef.current = promise;
+    return promise;
   }, [currentUser, syncUserProfile]);
 
   // Auth state listener
   useEffect(() => {
-    if (!isFirebaseConfigured()) return;
-
     try {
       const auth = getFirebaseAuth();
+      const fallbackTimer = setTimeout(() => {
+        setLoading(false);
+        setInitialized(true);
+      }, 1000);
+      
       const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        clearTimeout(fallbackTimer);
         setCurrentUser(user);
         if (user) {
           const profile = await syncUserProfile(user);
@@ -136,7 +197,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setInitialized(true);
       });
 
-      return () => unsubscribe();
+      return () => {
+        clearTimeout(fallbackTimer);
+        unsubscribe();
+      };
     } catch (error) {
       console.error('[AuthContext Init Error]', error);
       queueMicrotask(() => {
@@ -154,7 +218,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (err) {
       setLoading(false);
-      throw new Error(mapAuthError(err));
+      throw err instanceof Error ? err : new Error(mapAuthError(err));
     }
   };
 
@@ -172,25 +236,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
         await firebaseUpdateProfile(cred.user, { displayName });
       }
 
-      const now = new Date().toISOString();
-      const newProfile: UserDocument = {
+      const newProfile: Record<string, unknown> = {
         uid: cred.user.uid,
         email: cred.user.email || email,
         displayName: displayName || cred.user.displayName || null,
         photoURL: cred.user.photoURL || null,
         role: 'user',
-        createdAt: now,
-        lastLoginAt: now,
+        memberType: 'pending',
+        leaderId: '',
+        leaderCode: '',
+        profileCompleted: false,
+        createdAt: serverTimestamp(),
+        lastLoginAt: serverTimestamp(),
         isActive: true,
         isBanned: false,
       };
 
       const db = getFirebaseDb();
       await setDoc(doc(db, FIRESTORE_COLLECTIONS.USERS, cred.user.uid), newProfile);
-      setUserProfile(newProfile);
+      setUserProfile(newProfile as unknown as UserDocument);
     } catch (err) {
       setLoading(false);
-      throw new Error(mapAuthError(err));
+      throw err instanceof Error ? err : new Error(mapAuthError(err));
     }
   };
 
@@ -231,18 +298,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const loginWithGoogle = async (): Promise<void> => {
     setLoading(true);
     try {
-      if (!isFirebaseConfigured()) {
-        const msg = 'Firebase Auth is not configured. Missing required environment variables (NEXT_PUBLIC_FIREBASE_*).';
-        console.error('[Google Sign-In Error]:', msg);
-        throw new Error(msg);
-      }
       const auth = getFirebaseAuth();
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       await signInWithPopup(auth, provider);
     } catch (err: unknown) {
       setLoading(false);
-      console.error('[Exact Firebase Auth Error during Google Sign-In]:', err);
+      console.error('[Firebase Auth Error during Google Sign-In]:', err);
       throw err;
     }
   };
@@ -275,3 +337,4 @@ export function useAuthContext(): AuthContextType {
   }
   return context;
 }
+

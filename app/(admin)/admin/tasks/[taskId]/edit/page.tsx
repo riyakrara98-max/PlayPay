@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { doc, getDoc } from 'firebase/firestore';
 import { ArrowLeft, AlertCircle, Loader2 } from 'lucide-react';
 
-import { getFirebaseDb, isFirebaseConfigured } from '@/firebase/config';
+import { getFirebaseDb } from '@/firebase/config';
 import { TaskDocument, FIRESTORE_COLLECTIONS } from '@/types/firestore';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { SectionHeader } from '@/components/layout/SectionHeader';
@@ -25,14 +25,6 @@ export default function EditTaskPage() {
 
   useEffect(() => {
     if (!taskId) return;
-
-    if (!isFirebaseConfigured()) {
-      queueMicrotask(() => {
-        setError('Firebase is not configured.');
-        setLoading(false);
-      });
-      return;
-    }
 
     const fetchTask = async () => {
       try {

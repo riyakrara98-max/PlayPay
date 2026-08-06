@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { AdminRoute } from '@/components/auth/AdminRoute';
 import { AdminSidebar } from '@/components/navigation/AdminSidebar';
 import { AdminTopBar } from '@/components/navigation/AdminTopBar';
@@ -10,10 +11,19 @@ import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { Drawer } from '@/components/ui/drawer';
 import { useAdminDashboardData } from '@/hooks/useAdminDashboardData';
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+function DashboardStatsListener({ onPendingCountChange }: { onPendingCountChange: (count: number) => void }) {
   const { stats } = useAdminDashboardData();
-  const pendingCount = stats.pendingSubmissions;
+  useEffect(() => {
+    onPendingCountChange(stats.pendingSubmissions);
+  }, [stats.pendingSubmissions, onPendingCountChange]);
+  return null;
+}
+
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const isDashboardPage = pathname === '/admin' || pathname === '/admin/dashboard';
+  const [pendingCount, setPendingCount] = useState(0);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   const [isCollapsed, setIsCollapsed] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -25,6 +35,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <AdminRoute>
+      {isDashboardPage && <DashboardStatsListener onPendingCountChange={setPendingCount} />}
       <SidebarLayout
         isSidebarCollapsed={isCollapsed}
         sidebar={

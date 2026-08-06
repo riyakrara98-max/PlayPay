@@ -3,7 +3,7 @@
 import React, { useState, use } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import {
   ArrowLeft,
   Coins,
@@ -28,6 +28,9 @@ import { TaskDocument, EnrollmentDocument, FIRESTORE_COLLECTIONS, CloudinaryMeta
 import { TaskStatusTimeline } from '@/components/tasks/TaskStatusTimeline';
 import { TaskInstructionsList } from '@/components/tasks/TaskInstructionsList';
 import { ScreenshotUploader } from '@/components/tasks/ScreenshotUploader';
+import { formatDate, formatDateTime } from '@/utils/formatters';
+import { isTaskExpired } from '@/lib/taskAvailability';
+import { resolveMemberReward } from '@/lib/rewardResolver';
 
 interface TaskDetailPageProps {
   params: Promise<{ enrollmentId: string }>;
@@ -36,7 +39,7 @@ interface TaskDetailPageProps {
 export default function TaskDetailPage({ params }: TaskDetailPageProps) {
   const { enrollmentId } = use(params);
   const router = useRouter();
-  const { currentUser, loading: authLoading } = useAuthContext();
+  const { currentUser, userProfile, loading: authLoading } = useAuthContext();
   const { toast } = useToast();
 
   // Load Realtime Enrollment
@@ -72,26 +75,33 @@ export default function TaskDetailPage({ params }: TaskDetailPageProps) {
   // Initialize screenshot and comment from enrollment if exists
   const initialScreenshotUrl = enrollment?.screenshotUrl;
   const initialUserComment = enrollment?.userComment;
+  const cloudinaryPublicId = enrollment?.cloudinaryMetadata?.public_id;
 
   React.useEffect(() => {
     if (initialScreenshotUrl) {
-      queueMicrotask(() => {
-        setUploadedData({
+      setUploadedData((prev) => {
+        if (prev?.url === initialScreenshotUrl) return prev;
+        return {
           url: initialScreenshotUrl,
-          publicId: enrollment?.cloudinaryMetadata?.public_id || 'existing_proof',
-          metadata: enrollment?.cloudinaryMetadata || {
-            public_id: 'existing_proof',
+          publicId: cloudinaryPublicId || 'existing_proof',
+          metadata: {
+            public_id: cloudinaryPublicId || 'existing_proof',
             secure_url: initialScreenshotUrl,
           },
-        });
+        };
       });
     }
     if (initialUserComment) {
-      queueMicrotask(() => {
-        setUserComment(initialUserComment);
-      });
+      setUserComment((prev) => (prev ? prev : initialUserComment));
     }
-  }, [initialScreenshotUrl, initialUserComment, enrollment?.cloudinaryMetadata]);
+  }, [initialScreenshotUrl, initialUserComment, cloudinaryPublicId]);
+
+  const handleUploadComplete = React.useCallback(
+    (data: { url: string; publicId: string; metadata: CloudinaryMetadata } | null) => {
+      setUploadedData(data);
+    },
+    []
+  );
 
   // Copy assigned comment handler
   const handleCopyComment = (commentText: string) => {
@@ -183,13 +193,24 @@ export default function TaskDetailPage({ params }: TaskDetailPageProps) {
   }
 
   // Status checks according to Rule 2 & Rule 3
+  const resolvedReward = resolveMemberReward(
+    enrollment.rewardAmount || enrollment.reward || task?.rewardAmount || 0,
+    userProfile?.effectiveReward
+  );
+
   const isApproved = enrollment.status === 'approved';
   const isRejected = enrollment.status === 'rejected';
   const isPendingSubmitted = enrollment.status === 'pending' && Boolean(enrollment.submittedAt);
+  const isPendingUnsubmitted = enrollment.status === 'pending' && !enrollment.submittedAt;
+
+  const isExpired = isTaskExpired((task || enrollment) as unknown as TaskDocument);
+
+  const isExpiredUnsubmitted = isPendingUnsubmitted && isExpired;
+  const isExpiredRejected = isRejected && isExpired;
 
   // Rule 2: Immutable Lock when submitted & pending or approved
-  // Rule 3: Unlock screenshot & comment ONLY if rejected
-  const isReadOnly = isApproved || isPendingSubmitted;
+  // Rule 3: Unlock screenshot & comment ONLY if rejected (and NOT expired)
+  const isReadOnly = isApproved || isPendingSubmitted || isExpiredUnsubmitted || isExpiredRejected;
 
   // Determine comment mode
   const isHintMode = task?.commentMode === 'hint';
@@ -268,11 +289,7 @@ export default function TaskDetailPage({ params }: TaskDetailPageProps) {
                 </h1>
                 <p className="text-[11px] text-[var(--text-muted)] font-mono mt-0.5">
                   Enrolled:{' '}
-                  {new Date(enrollment.enrolledAt).toLocaleDateString('en-IN', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric',
-                  })}
+                  {formatDate(enrollment.enrolledAt)}
                 </p>
               </div>
             </div>
@@ -284,7 +301,7 @@ export default function TaskDetailPage({ params }: TaskDetailPageProps) {
               </span>
               <div className="flex items-center gap-1 text-xl sm:text-2xl font-black text-[var(--primary)] font-mono">
                 <Coins className="w-5 h-5 text-[var(--primary)]" />
-                <span>₹{enrollment.rewardAmount || enrollment.reward || task?.rewardAmount || 0}</span>
+                <span>₹{resolvedReward}</span>
               </div>
             </div>
           </div>
@@ -309,12 +326,9 @@ export default function TaskDetailPage({ params }: TaskDetailPageProps) {
               <p className="text-xs text-[var(--text-secondary)] mt-0.5 leading-relaxed">
                 Your submission passed admin verification on{' '}
                 {enrollment.reviewedAt
-                  ? new Date(enrollment.reviewedAt).toLocaleDateString('en-IN', {
-                      day: 'numeric',
-                      month: 'short',
-                    })
+                  ? formatDate(enrollment.reviewedAt)
                   : 'recently'}
-                . Reward of ₹{enrollment.rewardAmount || enrollment.reward || 0} has been credited.
+                . Reward of ₹{resolvedReward} has been credited.
               </p>
             </div>
           </div>
@@ -328,20 +342,28 @@ export default function TaskDetailPage({ params }: TaskDetailPageProps) {
               <h4 className="text-xs font-bold text-[var(--warning)]">Submission Locked for Admin Review</h4>
               <p className="text-xs text-[var(--text-secondary)] mt-0.5 leading-relaxed">
                 Your task proof was submitted on{' '}
-                {new Date(enrollment.submittedAt!).toLocaleString('en-IN', {
-                  day: 'numeric',
-                  month: 'short',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
+                {formatDateTime(enrollment.submittedAt!)}
                 . All fields are locked while our verification team reviews your screenshot.
               </p>
             </div>
           </div>
         )}
 
+        {/* Expired Banner */}
+        {(isExpiredUnsubmitted || isExpiredRejected) && (
+          <div className="p-4 rounded-2xl bg-[var(--danger)]/10 border border-[var(--danger)]/30 text-[var(--danger)] flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-[var(--danger)]" />
+            <div>
+              <h4 className="text-xs font-bold text-[var(--danger)]">Task Expired</h4>
+              <p className="text-xs text-[var(--text-secondary)] mt-0.5 leading-relaxed">
+                Submission deadline has passed. This task is no longer accepting proof submissions.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Rejected Banner & Unlock Prompt (Rule 3) */}
-        {isRejected && (
+        {isRejected && !isExpired && (
           <div className="p-4 rounded-2xl bg-[var(--danger)]/10 border border-[var(--danger)]/30 text-[var(--text-primary)] flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-[var(--danger)] shrink-0 mt-0.5" />
             <div>
@@ -436,12 +458,26 @@ export default function TaskDetailPage({ params }: TaskDetailPageProps) {
         {/* Screenshot Uploader */}
         <ScreenshotUploader
           initialUrl={uploadedData?.url || initialScreenshotUrl}
-          onUploadComplete={(data) => setUploadedData(data)}
+          onUploadComplete={handleUploadComplete}
           isDisabled={isReadOnly}
         />
 
         {/* Rule 2 & 7: Submit Button shown ONLY if not read-only */}
-        {!isReadOnly && (
+        {(isExpiredUnsubmitted || isExpiredRejected) ? (
+          <div className="pt-2">
+            <button
+              type="button"
+              disabled
+              className="w-full py-4 px-6 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-[var(--surface-elevated)] text-[var(--text-muted)] border border-[var(--border)] cursor-not-allowed opacity-70"
+            >
+              <Lock className="w-5 h-5" />
+              <span>Task Expired</span>
+            </button>
+            <p className="text-[11px] text-center text-[var(--text-muted)] mt-2 font-medium">
+              Submission deadline has passed.
+            </p>
+          </div>
+        ) : !isReadOnly ? (
           <div className="pt-2">
             <button
               type="button"
@@ -481,7 +517,7 @@ export default function TaskDetailPage({ params }: TaskDetailPageProps) {
               </p>
             )}
           </div>
-        )}
+        ) : null}
       </motion.div>
     </PageContainer>
   );
