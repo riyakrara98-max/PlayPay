@@ -15,6 +15,7 @@ import {
   Eye,
   Globe,
   RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { getFirebaseDb } from '@/firebase/config';
@@ -165,6 +166,16 @@ export default function AdminSettingsPage() {
         maintenanceMessage: formData.maintenanceMessage?.trim() || '',
         paymentEligibilityDays: Number(formData.paymentEligibilityDays),
         adminWhatsAppNumber: formData.adminWhatsAppNumber.trim(),
+        heroEnabled: !!formData.heroEnabled,
+        heroTitle: formData.heroTitle?.trim() || '',
+        heroSubtitle: formData.heroSubtitle?.trim() || '',
+        heroCtaText: formData.heroCtaText?.trim() || '',
+        heroCtaLink: formData.heroCtaLink?.trim() || '',
+        heroBadgeText: formData.heroBadgeText?.trim() || '',
+        heroBgType: formData.heroBgType === 'image' ? 'image' : 'gradient',
+        heroBgImageUrl: formData.heroBgImageUrl?.trim() || '',
+        heroStartDate: formData.heroStartDate?.trim() || '',
+        heroEndDate: formData.heroEndDate?.trim() || '',
         settingsVersion: nextVersion,
         updatedAt: nowIso,
         updatedBy: currentUser?.uid || 'admin',
@@ -339,6 +350,183 @@ export default function AdminSettingsPage() {
               ) : (
                 <div className="p-3 rounded-xl bg-[var(--bg-muted)] border border-[var(--border)] text-xs text-[var(--text-secondary)] italic">
                   Announcement banner is currently disabled or empty.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Section 2.5: Homepage Hero CMS Manager */}
+          <div className="space-y-4 pt-2 border-t border-[var(--border)]">
+            <div className="flex items-center justify-between border-b border-[var(--border)] pb-2.5">
+              <h3 className="text-base font-extrabold text-[var(--text-primary)] flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-amber-500" /> Homepage Hero Banner CMS
+              </h3>
+
+              {/* Enable Hero Switch */}
+              <label className="relative inline-flex items-center cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={!!formData.heroEnabled}
+                  onChange={(e) =>
+                    setFormData({ ...formData, heroEnabled: e.target.checked })
+                  }
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--brand)]"></div>
+                <span className="ml-2 text-xs font-semibold text-[var(--text-primary)]">
+                  {formData.heroEnabled ? 'Enabled' : 'Disabled'}
+                </span>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-[var(--text-primary)]">
+                  Hero Title
+                </label>
+                <Input
+                  value={formData.heroTitle || ''}
+                  onChange={(e) => setFormData({ ...formData, heroTitle: e.target.value })}
+                  placeholder="e.g. Earn Cash for Testing & Reviewing Apps"
+                  className="text-xs w-full"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-[var(--text-primary)]">
+                  Badge Text (Top Pill)
+                </label>
+                <Input
+                  value={formData.heroBadgeText || ''}
+                  onChange={(e) => setFormData({ ...formData, heroBadgeText: e.target.value })}
+                  placeholder="e.g. Play Store App Review Platform"
+                  className="text-xs w-full"
+                />
+              </div>
+
+              <div className="space-y-1.5 md:col-span-2">
+                <label className="text-xs font-semibold text-[var(--text-primary)]">
+                  Hero Subtitle / Description
+                </label>
+                <Input
+                  value={formData.heroSubtitle || ''}
+                  onChange={(e) => setFormData({ ...formData, heroSubtitle: e.target.value })}
+                  placeholder="e.g. Download apps, submit review screenshots, and receive instant cash payouts..."
+                  className="text-xs w-full"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-[var(--text-primary)]">
+                  CTA Button Text
+                </label>
+                <Input
+                  value={formData.heroCtaText || ''}
+                  onChange={(e) => setFormData({ ...formData, heroCtaText: e.target.value })}
+                  placeholder="e.g. START EARNING NOW"
+                  className="text-xs w-full font-bold"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-[var(--text-primary)]">
+                  CTA Button Link / Anchor
+                </label>
+                <Input
+                  value={formData.heroCtaLink || ''}
+                  onChange={(e) => setFormData({ ...formData, heroCtaLink: e.target.value })}
+                  placeholder="e.g. #tasks-marketplace or /my-tasks"
+                  className="text-xs w-full font-mono"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-[var(--text-primary)]">
+                  Background Style
+                </label>
+                <select
+                  value={formData.heroBgType || 'gradient'}
+                  onChange={(e) => setFormData({ ...formData, heroBgType: e.target.value as 'gradient' | 'image' })}
+                  className="w-full px-3 py-2 bg-[var(--surface-elevated)] border border-[var(--border)] rounded-[var(--radius-md)] text-xs text-[var(--text-primary)]"
+                >
+                  <option value="gradient">Gradient Overlay</option>
+                  <option value="image">Custom Image URL</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-[var(--text-primary)]">
+                  Background Image URL (Optional)
+                </label>
+                <Input
+                  value={formData.heroBgImageUrl || ''}
+                  onChange={(e) => setFormData({ ...formData, heroBgImageUrl: e.target.value })}
+                  placeholder="https://..."
+                  className="text-xs w-full font-mono"
+                  disabled={formData.heroBgType !== 'image'}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-[var(--text-primary)]">
+                  Start Date (Optional)
+                </label>
+                <Input
+                  type="date"
+                  value={formData.heroStartDate ? formData.heroStartDate.slice(0, 10) : ''}
+                  onChange={(e) => setFormData({ ...formData, heroStartDate: e.target.value })}
+                  className="text-xs w-full font-mono"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-[var(--text-primary)]">
+                  End Date (Optional)
+                </label>
+                <Input
+                  type="date"
+                  value={formData.heroEndDate ? formData.heroEndDate.slice(0, 10) : ''}
+                  onChange={(e) => setFormData({ ...formData, heroEndDate: e.target.value })}
+                  className="text-xs w-full font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Hero Live Preview */}
+            <div className="space-y-1.5 pt-2">
+              <span className="text-[11px] font-bold text-[var(--text-secondary)] uppercase tracking-wider flex items-center gap-1">
+                <Eye className="w-3.5 h-3.5" /> Homepage Hero Live Preview
+              </span>
+              {formData.heroEnabled ? (
+                <div
+                  className={`p-4 rounded-xl border border-[var(--primary)]/30 text-xs space-y-2 relative overflow-hidden ${
+                    formData.heroBgType === 'image' && formData.heroBgImageUrl
+                      ? 'bg-cover bg-center text-white'
+                      : 'bg-gradient-to-r from-[var(--primary)]/15 via-[var(--surface)] to-[var(--success)]/15'
+                  }`}
+                  style={
+                    formData.heroBgType === 'image' && formData.heroBgImageUrl
+                      ? { backgroundImage: `linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url(${formData.heroBgImageUrl})` }
+                      : {}
+                  }
+                >
+                  <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-[var(--radius-pill)] bg-[var(--primary)]/10 text-[var(--primary)] text-[10px] font-bold border border-[var(--primary)]/20">
+                    <Sparkles className="w-3 h-3 fill-current" />
+                    <span>{formData.heroBadgeText || 'Badge Text'}</span>
+                  </div>
+                  <h4 className="text-base font-extrabold text-[var(--text-primary)]">
+                    {formData.heroTitle || 'Hero Title Placeholder'}
+                  </h4>
+                  <p className="text-xs text-[var(--text-secondary)]">
+                    {formData.heroSubtitle || 'Hero subtitle placeholder...'}
+                  </p>
+                  <Button variant="primary" size="sm" className="font-extrabold text-xs">
+                    {formData.heroCtaText || 'START EARNING'}
+                  </Button>
+                </div>
+              ) : (
+                <div className="p-3 rounded-xl bg-[var(--bg-muted)] border border-[var(--border)] text-xs text-[var(--text-secondary)] italic">
+                  Hero Banner is OFF. Homepage will collapse and show available tasks directly below the notice bar.
                 </div>
               )}
             </div>

@@ -48,6 +48,7 @@ import {
   query,
   where,
   getDocs,
+  writeBatch,
 } from 'firebase/firestore';
 
 import { getFirebaseDb } from '@/firebase/config';
@@ -476,6 +477,81 @@ export function TaskForm({ initialTask = null, isEditMode = false }: TaskFormPro
           updatedAt: serverTimestamp(),
         });
       }
+
+      // Sync Leader Task Assignments in leaderTaskAssignments collection
+      try {
+        let targetLeaderUids: string[] = [];
+        if (assignmentType === 'leaders') {
+          targetLeaderUids = assignedLeaderIds;
+        } else if (assignmentType === 'all') {
+          targetLeaderUids = teamLeaders.map((l) => l.uid);
+          if (targetLeaderUids.length === 0) {
+            const leadersSnap = await getDocs(
+              query(
+                collection(db, FIRESTORE_COLLECTIONS.USERS),
+                where('memberType', '==', 'team_leader')
+              )
+            );
+            leadersSnap.forEach((d) => targetLeaderUids.push(d.id));
+          }
+        }
+
+        if (targetLeaderUids.length > 0) {
+          const nowIso = new Date().toISOString();
+          const batch = writeBatch(db);
+
+          for (const leaderUid of targetLeaderUids) {
+            const assignmentRef = doc(
+              db,
+              FIRESTORE_COLLECTIONS.LEADER_TASK_ASSIGNMENTS,
+              `${targetTaskId}_${leaderUid}`
+            );
+            batch.set(
+              assignmentRef,
+              {
+                id: `${targetTaskId}_${leaderUid}`,
+                taskId: targetTaskId,
+                leaderId: leaderUid,
+                assignmentStatus: 'active',
+                status: 'active',
+                assignedBy: userUid,
+                assignedAt: nowIso,
+                updatedAt: serverTimestamp(),
+              },
+              { merge: true }
+            );
+          }
+
+          if (isEditMode && initialTask?.assignedLeaderIds) {
+            const removedLeaderIds = initialTask.assignedLeaderIds.filter(
+              (id) => !targetLeaderUids.includes(id)
+            );
+            for (const removedId of removedLeaderIds) {
+              const removedRef = doc(
+                db,
+                FIRESTORE_COLLECTIONS.LEADER_TASK_ASSIGNMENTS,
+                `${targetTaskId}_${removedId}`
+              );
+              batch.set(
+                removedRef,
+                {
+                  assignmentStatus: 'removed',
+                  status: 'inactive',
+                  removedAt: nowIso,
+                  removedBy: userUid,
+                  updatedAt: serverTimestamp(),
+                },
+                { merge: true }
+              );
+            }
+          }
+
+          await batch.commit();
+        }
+      } catch (assignErr) {
+        console.error('[TaskForm Leader Assignment Sync Error]', assignErr);
+      }
+
       router.push('/admin/tasks');
     } catch (err: any) {
       setFormError(err.message || 'Failed to save task.');

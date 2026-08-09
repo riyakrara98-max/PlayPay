@@ -11,6 +11,7 @@ export interface CheckboxProps extends Omit<React.InputHTMLAttributes<HTMLInputE
   checked?: boolean;
   indeterminate?: boolean;
   onChange?: (checked: boolean) => void;
+  onCheckedChange?: (checked: boolean) => void;
 }
 
 export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
@@ -22,6 +23,7 @@ export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
       checked = false,
       indeterminate = false,
       onChange,
+      onCheckedChange,
       disabled,
       className,
       id,
@@ -35,6 +37,7 @@ export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       if (disabled) return;
       onChange?.(e.target.checked);
+      onCheckedChange?.(e.target.checked);
     };
 
     return (

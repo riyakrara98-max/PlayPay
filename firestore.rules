@@ -44,6 +44,18 @@ service cloud.firestore {
         meta.secure_url is string && isCloudinaryUrl(meta.secure_url);
     }
 
+    function getTaskEnrolledCount() {
+      return resource.data.keys().hasAll(['enrolledCount']) ? resource.data.enrolledCount : 0;
+    }
+
+    function getTaskCurrentSubmissions() {
+      return resource.data.keys().hasAll(['currentSubmissions']) ? resource.data.currentSubmissions : 0;
+    }
+
+    function getTaskTotalSlots() {
+      return resource.data.keys().hasAll(['totalSlots']) ? resource.data.totalSlots : (resource.data.keys().hasAll(['maxSubmissions']) ? resource.data.maxSubmissions : 1);
+    }
+
     // Default catch-all security net
     match /{document=**} {
       allow read, write: if false;
@@ -102,7 +114,11 @@ service cloud.firestore {
         isSignedIn() &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'enrolledCount', 'currentSubmissions', 'updatedAt'
-        ])
+        ]) &&
+        request.resource.data.enrolledCount == getTaskEnrolledCount() + 1 &&
+        request.resource.data.currentSubmissions == getTaskCurrentSubmissions() + 1 &&
+        getTaskEnrolledCount() < getTaskTotalSlots() &&
+        existsAfter(/databases/$(database)/documents/enrollments/$(taskId + '_' + request.auth.uid))
       );
     }
 
@@ -168,19 +184,22 @@ service cloud.firestore {
     // Leader Task Assignments Collection (Phase 7A, 7A.1 & 7A.2)
     match /leaderTaskAssignments/{assignmentId} {
       allow read: if isAdmin() || (
-        isSignedIn() && request.auth.uid == resource.data.leaderId
+        isSignedIn() && (
+          request.auth.uid == resource.data.leaderId ||
+          getUserData().leaderId == resource.data.leaderId ||
+          isTeamLeader()
+        )
       );
-      allow create, delete: if isAdmin();
+      allow create: if isAdmin() || (
+        isSignedIn() &&
+        request.resource.data.leaderId == request.auth.uid
+      );
       allow update: if isAdmin() || (
         isSignedIn() &&
         request.auth.uid == resource.data.leaderId &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'leaderReward',
-          'rewardConfiguredAt',
-          'rewardConfiguredBy',
-          'updatedAt'
-        ])
+        request.resource.data.leaderId == resource.data.leaderId
       );
+      allow delete: if isAdmin();
     }
 
     // Admin Activity Audit Log Collection

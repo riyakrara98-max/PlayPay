@@ -16,7 +16,7 @@ export function useTeamLeaderAssignedTasks() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const isTeamLeader = userProfile?.memberType === 'team_leader' || userProfile?.role === 'team_leader';
+    const isTeamLeader = userProfile?.memberType === 'team_leader' || (userProfile?.role as string) === 'team_leader';
     if (!initialized || authLoading || !currentUser || !isTeamLeader) {
       setAssignedTasks([]);
       setLoading(false);
@@ -37,50 +37,85 @@ export function useTeamLeaderAssignedTasks() {
       assignmentsQuery,
       async (snapshot) => {
         try {
-          const validAssignments: LeaderTaskAssignmentDocument[] = [];
-          
+          const assignmentMap = new Map<string, LeaderTaskAssignmentDocument>();
+          const removedTaskIds = new Set<string>();
+
           snapshot.forEach((docSnap) => {
             const data = docSnap.data() as LeaderTaskAssignmentDocument;
-            // Backward compatibility: Treat missing assignmentStatus as active
             const isRemoved = data.assignmentStatus === 'removed' || data.status === 'inactive';
-            const isPaused = data.assignmentStatus === 'paused';
-            const isActive = data.assignmentStatus === 'active' || (!data.assignmentStatus && data.status !== 'inactive');
-            
-            if (isActive) {
-              validAssignments.push({ ...data, id: docSnap.id });
+            if (isRemoved) {
+              removedTaskIds.add(data.taskId);
+            } else {
+              assignmentMap.set(data.taskId, { ...data, id: docSnap.id });
             }
           });
 
-          if (validAssignments.length === 0) {
-            setAssignedTasks([]);
-            setLoading(false);
-            return;
+          // Also fetch active tasks to ensure tasks assigned to 'all' or explicit assignedLeaderIds are included
+          const tasksQuery = query(
+            collection(db, FIRESTORE_COLLECTIONS.TASKS),
+            where('status', '==', 'active')
+          );
+          const tasksSnap = await getDocs(tasksQuery);
+
+          const allRelevantTasks: TaskDocument[] = [];
+          tasksSnap.forEach((tDoc) => {
+            const tData = { id: tDoc.id, ...tDoc.data() } as TaskDocument;
+            
+            // Check if task is assigned to this leader
+            const isGlobal = !tData.assignmentType || tData.assignmentType === 'all';
+            const isExplicitlyAssigned = tData.assignmentType === 'leaders' && Array.isArray(tData.assignedLeaderIds) && tData.assignedLeaderIds.includes(currentUser.uid);
+            const hasExistingAssignment = assignmentMap.has(tData.id);
+
+            if (!removedTaskIds.has(tData.id) && (isGlobal || isExplicitlyAssigned || hasExistingAssignment)) {
+              allRelevantTasks.push(tData);
+
+              // If no assignment record exists in LEADER_TASK_ASSIGNMENTS yet, synthesize in-memory
+              if (!hasExistingAssignment) {
+                const newAssignmentId = `${tData.id}_${currentUser.uid}`;
+                const newAssignment: LeaderTaskAssignmentDocument = {
+                  id: newAssignmentId,
+                  taskId: tData.id,
+                  leaderId: currentUser.uid,
+                  leaderReward: null,
+                  assignmentStatus: 'active',
+                  status: 'active',
+                  assignedAt: tData.createdAt || new Date().toISOString(),
+                  assignedBy: tData.createdBy || 'admin',
+                  updatedAt: new Date().toISOString(),
+                };
+
+                assignmentMap.set(tData.id, newAssignment);
+              }
+            }
+          });
+
+          // Also include tasks that had assignments in snapshot if they weren't in the active tasksSnap query
+          const missingAssignmentTaskIds = Array.from(assignmentMap.keys()).filter(
+            (taskId) => !allRelevantTasks.some((t) => t.id === taskId)
+          );
+
+          if (missingAssignmentTaskIds.length > 0) {
+            const chunkSize = 30;
+            for (let i = 0; i < missingAssignmentTaskIds.length; i += chunkSize) {
+              const chunk = missingAssignmentTaskIds.slice(i, i + chunkSize);
+              const extraTasksQuery = query(
+                collection(db, FIRESTORE_COLLECTIONS.TASKS),
+                where(documentId(), 'in', chunk)
+              );
+              const extraSnap = await getDocs(extraTasksQuery);
+              extraSnap.forEach((docSnap) => {
+                allRelevantTasks.push({ id: docSnap.id, ...docSnap.data() } as TaskDocument);
+              });
+            }
           }
 
-          // Fetch matching tasks
-          // Firestore 'in' query supports up to 30 items. If a leader has more than 30 tasks, we need to chunk it.
-          const taskIds = validAssignments.map((a) => a.taskId);
-          
-          const tasks: TaskDocument[] = [];
-          
-          // Chunking for 'in' query
-          const chunkSize = 30;
-          for (let i = 0; i < taskIds.length; i += chunkSize) {
-            const chunk = taskIds.slice(i, i + chunkSize);
-            const tasksQuery = query(
-              collection(db, FIRESTORE_COLLECTIONS.TASKS),
-              where(documentId(), 'in', chunk)
-            );
-            const tasksSnap = await getDocs(tasksQuery);
-            tasksSnap.forEach((docSnap) => {
-              tasks.push({ id: docSnap.id, ...docSnap.data() } as TaskDocument);
-            });
-          }
-
-          const combined: AssignedTask[] = validAssignments.map(assignment => {
-            const task = tasks.find(t => t.id === assignment.taskId);
-            return { assignment, task: task! };
-          }).filter(item => item.task); // Filter out any missing tasks just in case
+          const combined: AssignedTask[] = allRelevantTasks
+            .map((task) => {
+              const assignment = assignmentMap.get(task.id);
+              if (!assignment) return null;
+              return { assignment, task };
+            })
+            .filter((item): item is AssignedTask => item !== null);
 
           setAssignedTasks(combined);
           setLoading(false);

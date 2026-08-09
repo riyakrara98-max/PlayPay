@@ -49,10 +49,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Helper to fetch or initialize user profile document in Firestore
   const syncUserProfile = useCallback(async (firebaseUser: User): Promise<UserDocument | null> => {
     try {
-      const auth = getFirebaseAuth();
-      const activeUser = auth.currentUser;
-      if (!firebaseUser || !activeUser || activeUser.uid !== firebaseUser.uid) {
-        console.warn('[syncUserProfile] Skipped: Firebase Auth not ready or user mismatch');
+      if (!firebaseUser || !firebaseUser.uid) {
         return null;
       }
 
@@ -175,6 +172,24 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return promise;
   }, [currentUser, syncUserProfile]);
 
+  // Helper to sync session cookie with server
+  const syncServerSession = useCallback(async (user: User | null, profile: UserDocument | null) => {
+    if (!user) {
+      await fetch('/api/auth/session', { method: 'DELETE' }).catch(() => {});
+      return;
+    }
+    await fetch('/api/auth/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        uid: user.uid,
+        email: user.email,
+        role: profile?.role || 'user',
+        memberType: profile?.memberType || 'pending',
+      }),
+    }).catch(() => {});
+  }, []);
+
   // Auth state listener
   useEffect(() => {
     try {
@@ -190,8 +205,42 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (user) {
           const profile = await syncUserProfile(user);
           setUserProfile(profile);
+          await syncServerSession(user, profile);
         } else {
-          setUserProfile(null);
+          try {
+            const res = await fetch('/api/auth/session');
+            const sessionData = await res.json().catch(() => null);
+            if (sessionData && sessionData.authenticated && sessionData.session?.uid) {
+              const serverUid = sessionData.session.uid;
+              const serverEmail = sessionData.session.email || '';
+              const syntheticUser = { uid: serverUid, email: serverEmail } as User;
+              const profile = await syncUserProfile(syntheticUser);
+              if (profile) {
+                setUserProfile(profile);
+                setCurrentUser(syntheticUser);
+              } else {
+                setUserProfile({
+                  uid: serverUid,
+                  email: serverEmail,
+                  role: sessionData.session.role || 'user',
+                  memberType: sessionData.session.memberType || 'pending',
+                  displayName: null,
+                  photoURL: null,
+                  createdAt: new Date().toISOString(),
+                  lastLoginAt: new Date().toISOString(),
+                  isActive: true,
+                  isBanned: false,
+                } as UserDocument);
+                setCurrentUser(syntheticUser);
+              }
+            } else {
+              setUserProfile(null);
+              await syncServerSession(null, null);
+            }
+          } catch {
+            setUserProfile(null);
+            await syncServerSession(null, null);
+          }
         }
         setLoading(false);
         setInitialized(true);
@@ -208,14 +257,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setInitialized(true);
       });
     }
-  }, [syncUserProfile]);
+  }, [syncUserProfile, syncServerSession]);
 
   // Auth Action Methods
   const login = async (email: string, password: string): Promise<void> => {
     setLoading(true);
     try {
       const auth = getFirebaseAuth();
-      await signInWithEmailAndPassword(auth, email, password);
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      setCurrentUser(cred.user);
+      const profile = await syncUserProfile(cred.user);
+      setUserProfile(profile);
+      await syncServerSession(cred.user, profile);
+      setLoading(false);
+      setInitialized(true);
     } catch (err) {
       setLoading(false);
       throw err instanceof Error ? err : new Error(mapAuthError(err));
@@ -254,7 +309,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       const db = getFirebaseDb();
       await setDoc(doc(db, FIRESTORE_COLLECTIONS.USERS, cred.user.uid), newProfile);
-      setUserProfile(newProfile as unknown as UserDocument);
+      const typedProfile = newProfile as unknown as UserDocument;
+      setCurrentUser(cred.user);
+      setUserProfile(typedProfile);
+      await syncServerSession(cred.user, typedProfile);
+      setLoading(false);
+      setInitialized(true);
     } catch (err) {
       setLoading(false);
       throw err instanceof Error ? err : new Error(mapAuthError(err));
@@ -266,6 +326,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       const auth = getFirebaseAuth();
       await signOut(auth);
+      await fetch('/api/auth/session', { method: 'DELETE' }).catch(() => {});
       setCurrentUser(null);
       setUserProfile(null);
     } catch (err) {
@@ -301,7 +362,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const auth = getFirebaseAuth();
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
-      await signInWithPopup(auth, provider);
+      const cred = await signInWithPopup(auth, provider);
+      if (cred.user) {
+        setCurrentUser(cred.user);
+        const profile = await syncUserProfile(cred.user);
+        setUserProfile(profile);
+        await syncServerSession(cred.user, profile);
+        setLoading(false);
+        setInitialized(true);
+      }
     } catch (err: unknown) {
       setLoading(false);
       console.error('[Firebase Auth Error during Google Sign-In]:', err);

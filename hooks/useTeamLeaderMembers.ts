@@ -13,7 +13,7 @@ export function useTeamLeaderMembers() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const isTeamLeader = userProfile?.memberType === 'team_leader' || userProfile?.role === 'team_leader';
+    const isTeamLeader = userProfile?.memberType === 'team_leader' || (userProfile?.role as string) === 'team_leader';
     if (!initialized || authLoading || !currentUser || !isTeamLeader) {
       setMembers([]);
       setLoading(false);

@@ -32,6 +32,7 @@ export interface UserDocument {
   unbannedBy?: string | null;
   unbannedAt?: string | null;
   totalTasksCompleted?: number;
+  totalEarned?: number;
   approvedTasksCount?: number;
   rejectedTasksCount?: number;
   weeklyStreak?: number;
@@ -192,6 +193,17 @@ export interface SiteSettingsDocument {
   maintenanceMessage?: string;
   paymentEligibilityDays: number;
   adminWhatsAppNumber: string;
+  // Homepage Hero CMS configuration
+  heroEnabled?: boolean;
+  heroTitle?: string;
+  heroSubtitle?: string;
+  heroCtaText?: string;
+  heroCtaLink?: string;
+  heroBadgeText?: string;
+  heroBgType?: 'gradient' | 'image';
+  heroBgImageUrl?: string;
+  heroStartDate?: string;
+  heroEndDate?: string;
   settingsVersion?: number;
   updatedAt: string;
   updatedBy?: string;
@@ -221,7 +233,11 @@ export type AuditActivityType =
   | 'Team Leader Enabled'
   | 'Team Leader Disabled'
   | 'Member Reward Configured'
-  | 'Bulk Member Rewards Updated';
+  | 'Bulk Member Rewards Updated'
+  | 'Bulk Users Activated'
+  | 'Bulk Users Deactivated'
+  | 'Bulk Assigned Leader'
+  | 'Bulk Unassigned Leader';
 
 export interface LeaderCodeDocument {
   leaderId: string;

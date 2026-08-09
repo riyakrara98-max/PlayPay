@@ -18,6 +18,16 @@ export const DEFAULT_SITE_SETTINGS: SiteSettingsDocument = {
   maintenanceMessage: 'System undergoes scheduled maintenance to optimize payment processing. Please check back shortly.',
   paymentEligibilityDays: 7,
   adminWhatsAppNumber: '',
+  heroEnabled: false,
+  heroTitle: 'Earn Cash for Testing & Reviewing Apps',
+  heroSubtitle: 'Download apps, submit review screenshots, and receive instant cash payouts directly to your UPI ID.',
+  heroCtaText: 'START EARNING NOW',
+  heroCtaLink: '#tasks-marketplace',
+  heroBadgeText: 'Play Store App Review Platform',
+  heroBgType: 'gradient',
+  heroBgImageUrl: '',
+  heroStartDate: '',
+  heroEndDate: '',
   updatedAt: new Date().toISOString(),
 };
 
@@ -71,6 +81,19 @@ export function SiteSettingsProvider({ children }: SiteSettingsProviderProps) {
                 data.paymentEligibilityDays ?? DEFAULT_SITE_SETTINGS.paymentEligibilityDays,
               adminWhatsAppNumber:
                 data.adminWhatsAppNumber || DEFAULT_SITE_SETTINGS.adminWhatsAppNumber,
+              heroEnabled:
+                typeof data.heroEnabled === 'boolean'
+                  ? data.heroEnabled
+                  : DEFAULT_SITE_SETTINGS.heroEnabled,
+              heroTitle: data.heroTitle ?? DEFAULT_SITE_SETTINGS.heroTitle,
+              heroSubtitle: data.heroSubtitle ?? DEFAULT_SITE_SETTINGS.heroSubtitle,
+              heroCtaText: data.heroCtaText ?? DEFAULT_SITE_SETTINGS.heroCtaText,
+              heroCtaLink: data.heroCtaLink ?? DEFAULT_SITE_SETTINGS.heroCtaLink,
+              heroBadgeText: data.heroBadgeText ?? DEFAULT_SITE_SETTINGS.heroBadgeText,
+              heroBgType: data.heroBgType === 'image' ? 'image' : 'gradient',
+              heroBgImageUrl: data.heroBgImageUrl || '',
+              heroStartDate: data.heroStartDate || '',
+              heroEndDate: data.heroEndDate || '',
               updatedAt: data.updatedAt || DEFAULT_SITE_SETTINGS.updatedAt,
               updatedBy: data.updatedBy,
             });

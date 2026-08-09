@@ -2,6 +2,7 @@ import React from 'react';
 import { Card } from '@/components/ui/card';
 import { ActivityItem } from '@/utils/teamLeaderAnalytics';
 import { formatDistanceToNow } from 'date-fns';
+import { parseDateInput } from '@/utils/formatters';
 import { Activity, CheckCircle2, Clock, DollarSign, XCircle, UserPlus } from 'lucide-react';
 
 interface RecentActivityCardProps {
@@ -79,7 +80,10 @@ export function RecentActivityCard({ activities }: RecentActivityCardProps) {
               </p>
               <div className="text-[10px] text-slate-500 mt-1.5 flex items-center gap-1.5">
                 <Clock className="w-3 h-3" />
-                {activity.timestamp ? formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true }) : 'Unknown time'}
+                {(() => {
+                  const d = parseDateInput(activity.timestamp);
+                  return d ? formatDistanceToNow(d, { addSuffix: true }) : 'Unknown time';
+                })()}
               </div>
             </div>
           </div>

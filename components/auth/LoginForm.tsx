@@ -37,7 +37,12 @@ export function LoginForm() {
         message: 'You have successfully signed in.',
         variant: 'success',
       });
-      router.push('/dashboard');
+      const searchParams = new URLSearchParams(window.location.search);
+      const redirectToParam = searchParams.get('redirectTo');
+      const safeRedirect = (redirectToParam && redirectToParam.startsWith('/') && !redirectToParam.startsWith('//'))
+        ? redirectToParam
+        : '/dashboard';
+      window.location.href = safeRedirect;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to sign in. Please check credentials.';
       setFormError(message);
@@ -60,7 +65,12 @@ export function LoginForm() {
         message: 'Welcome to PlayPay!',
         variant: 'success',
       });
-      router.push('/dashboard');
+      const searchParams = new URLSearchParams(window.location.search);
+      const redirectToParam = searchParams.get('redirectTo');
+      const safeRedirect = (redirectToParam && redirectToParam.startsWith('/') && !redirectToParam.startsWith('//'))
+        ? redirectToParam
+        : '/dashboard';
+      window.location.href = safeRedirect;
     } catch (err: unknown) {
       console.error('[Google Sign-In Failure]:', err);
       const message = mapAuthError(err);

@@ -10,6 +10,7 @@ export interface AvatarProps extends React.HTMLAttributes<HTMLDivElement> {
   src?: string;
   alt?: string;
   name?: string;
+  fallback?: string;
   size?: AvatarSize;
   status?: 'online' | 'offline' | 'busy' | 'away';
 }
@@ -18,6 +19,7 @@ export function Avatar({
   src,
   alt = 'Avatar',
   name,
+  fallback,
   size = 'md',
   status,
   className,
@@ -25,13 +27,14 @@ export function Avatar({
 }: AvatarProps) {
   const [hasError, setHasError] = useState(false);
 
-  const getInitials = (n?: string) => {
-    if (!n) return 'U';
-    const parts = n.trim().split(' ');
+  const getInitials = (n?: string, fb?: string) => {
+    const textToUse = n || fb;
+    if (!textToUse) return 'U';
+    const parts = textToUse.trim().split(' ');
     if (parts.length >= 2) {
       return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
     }
-    return n.slice(0, 2).toUpperCase();
+    return textToUse.slice(0, 2).toUpperCase();
   };
 
   const sizeClasses: Record<AvatarSize, { container: string; text: string; status: string }> = {
@@ -70,7 +73,7 @@ export function Avatar({
           />
         ) : (
           <span className={cn('uppercase font-mono', sizeClasses[size].text)}>
-            {getInitials(name)}
+            {getInitials(name, fallback)}
           </span>
         )}
       </div>

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { getFirebaseDb } from '@/firebase/config';
 import { FIRESTORE_COLLECTIONS } from '@/types/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import { AssignedTask } from '@/hooks/useTeamLeaderAssignedTasks';
+import { logFirestoreError, OperationType } from '@/lib/firebase-errors';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -58,15 +59,35 @@ export function RewardConfigurationModal({ isOpen, onClose, assignedTask }: Rewa
       const db = getFirebaseDb();
       const assignmentRef = doc(db, FIRESTORE_COLLECTIONS.LEADER_TASK_ASSIGNMENTS, assignment.id);
       
-      await updateDoc(assignmentRef, {
-        leaderReward: amount,
-        rewardConfiguredAt: serverTimestamp(),
-        rewardConfiguredBy: currentUser.uid,
-        updatedAt: serverTimestamp(),
-      });
+      const assignmentSnap = await getDoc(assignmentRef);
+      if (assignmentSnap.exists()) {
+        await updateDoc(assignmentRef, {
+          leaderReward: amount,
+          rewardConfiguredAt: serverTimestamp(),
+          rewardConfiguredBy: currentUser.uid,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await setDoc(
+          assignmentRef,
+          {
+            id: assignment.id,
+            taskId: task.id,
+            leaderId: currentUser.uid,
+            leaderReward: amount,
+            assignmentStatus: 'active',
+            status: 'active',
+            rewardConfiguredAt: serverTimestamp(),
+            rewardConfiguredBy: currentUser.uid,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
 
       onClose();
     } catch (err: unknown) {
+      logFirestoreError(err, OperationType.WRITE, `leaderTaskAssignments/${assignment.id}`);
       console.error('[Reward Config Error]', err);
       setError(err instanceof Error ? err.message : 'Failed to configure reward.');
     } finally {

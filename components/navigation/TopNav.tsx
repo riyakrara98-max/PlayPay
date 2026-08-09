@@ -16,6 +16,7 @@ import {
   LayoutDashboard,
   CheckSquare,
   CreditCard,
+  Search,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useTheme } from '@/hooks/use-theme';
@@ -26,6 +27,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Dropdown } from '@/components/ui/dropdown';
 import { Drawer } from '@/components/ui/drawer';
+import { SearchOverlayModal } from '@/components/tasks/SearchOverlayModal';
 
 export function TopNav() {
   const pathname = usePathname();
@@ -33,9 +35,11 @@ export function TopNav() {
   const { resolvedTheme, toggleTheme } = useTheme();
   const { currentUser, userProfile, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+
 
   const isAdmin = userProfile?.role === 'admin';
-  const isTeamLeader = userProfile?.memberType === 'team_leader' || userProfile?.role === 'team_leader';
+  const isTeamLeader = userProfile?.memberType === 'team_leader' || (userProfile?.role as string) === 'team_leader';
 
   const navLinks = [
     { href: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
@@ -174,7 +178,16 @@ export function TopNav() {
             </nav>
 
           {/* Action Area */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Search Icon (Opens Search Overlay) */}
+            <IconButton
+              icon={<Search className="w-4 h-4 text-[var(--text-primary)]" />}
+              aria-label="Search app tasks"
+              variant="ghost"
+              size="md"
+              onClick={() => setSearchOpen(true)}
+            />
+
             {/* Theme Switcher */}
             <IconButton
               icon={
@@ -189,6 +202,7 @@ export function TopNav() {
               size="md"
               onClick={toggleTheme}
             />
+
 
             {/* Switch to Team Leader Portal (Desktop) */}
             {currentUser && isTeamLeader && (
@@ -331,6 +345,12 @@ export function TopNav() {
           </button>
         </div>
       </Drawer>
+
+      {/* Global Search Overlay Modal */}
+      <SearchOverlayModal
+        isOpen={searchOpen}
+        onClose={() => setSearchOpen(false)}
+      />
     </>
   );
 }

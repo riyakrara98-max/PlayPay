@@ -28,6 +28,7 @@ import {
   Users as UsersIcon,
   ChevronRight,
   Edit3,
+  X,
   Copy,
   Check,
   AlertTriangle,
@@ -36,6 +37,7 @@ import {
   Zap,
   Tag,
   Share2,
+  UserCheck,
 } from 'lucide-react';
 import { doc, onSnapshot, collection, query, where, getDocs } from 'firebase/firestore';
 import { getFirebaseDb } from '@/firebase/config';
@@ -171,7 +173,7 @@ export default function UserDetailPage() {
         (snap) => {
           const list: EnrollmentDocument[] = snap.docs.map((d) => ({
             id: d.id,
-            ...(d.data() as Omit<UserDocument, 'id'>),
+            ...(d.data() as Omit<EnrollmentDocument, 'id'>),
           }));
           list.sort((a, b) => getSafeTime(b.enrolledAt) - getSafeTime(a.enrolledAt));
           setEnrollments(list);

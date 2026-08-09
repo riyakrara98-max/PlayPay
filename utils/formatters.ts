@@ -109,3 +109,24 @@ export function getSafeTime(dateInput: unknown): number {
   const date = parseDateInput(dateInput);
   return date ? date.getTime() : 0;
 }
+
+/**
+ * Returns remaining time string (e.g., "Ends in 2h 18m", "5h Left", "23m Left", "Expired").
+ * Uses expiresAt input or defaults to a 24h task window if unspecified.
+ */
+export function formatRemainingTime(expiresAtInput: unknown): string {
+  const expiryDate = parseDateInput(expiresAtInput);
+  if (!expiryDate) return '24h Left';
+  const now = new Date();
+  const diffInMs = expiryDate.getTime() - now.getTime();
+  if (diffInMs <= 0) return 'Expired';
+  const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
+  if (diffInMinutes < 60) return `${diffInMinutes}m Left`;
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  const remainingMins = diffInMinutes % 60;
+  if (diffInHours < 24) {
+    return remainingMins > 0 ? `Ends in ${diffInHours}h ${remainingMins}m` : `${diffInHours}h Left`;
+  }
+  const diffInDays = Math.floor(diffInHours / 24);
+  return `${diffInDays}d Left`;
+}

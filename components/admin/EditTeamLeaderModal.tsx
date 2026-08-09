@@ -21,17 +21,32 @@ interface EditTeamLeaderModalProps {
   ) => Promise<void>;
 }
 
-export function generateLeaderCode(existingUsers: UserDocument[]): string {
+export function generateLeaderCode(
+  existingUsers: UserDocument[],
+  user?: UserDocument | null
+): string {
+  // Extract clean A-Z letters from displayName or email
+  const rawName = (user?.displayName || user?.email?.split('@')[0] || 'LEADER').trim();
+  let nameLetters = rawName.toUpperCase().replace(/[^A-Z]/g, '');
+
+  if (nameLetters.length < 3) {
+    nameLetters = (nameLetters + 'LEADER').slice(0, 5);
+  } else if (nameLetters.length > 6) {
+    nameLetters = nameLetters.slice(0, 5);
+  }
+
   const existingCodes = new Set(
     existingUsers.map((u) => u.leaderCode?.toUpperCase()).filter(Boolean)
   );
+
   let code = '';
   let attempts = 0;
   do {
-    const randomDigits = Math.floor(100000 + Math.random() * 900000).toString();
-    code = `PP${randomDigits}`;
+    const randomDigits = Math.floor(100 + Math.random() * 900).toString();
+    code = `${nameLetters}${randomDigits}`;
     attempts++;
-  } while (existingCodes.has(code) && attempts < 100);
+  } while (existingCodes.has(code) && attempts < 200);
+
   return code;
 }
 
@@ -59,7 +74,7 @@ export function EditTeamLeaderModal({
       if (user.leaderCode && user.leaderCode.trim() !== '') {
         setLeaderCode(user.leaderCode.trim().toUpperCase());
       } else {
-        setLeaderCode(generateLeaderCode(existingUsers));
+        setLeaderCode(generateLeaderCode(existingUsers, user));
       }
       setIsLeaderActive(user.isLeaderActive ?? true);
       setTargetMemberType('team_leader');
@@ -74,7 +89,7 @@ export function EditTeamLeaderModal({
 
   const handleAutoGenerate = () => {
     if (hasExistingCode) return;
-    const newCode = generateLeaderCode(existingUsers);
+    const newCode = generateLeaderCode(existingUsers, user);
     setLeaderCode(newCode);
     setErrorMsg(null);
   };
@@ -105,8 +120,8 @@ export function EditTeamLeaderModal({
       return;
     }
 
-    if (!/^PP[A-Z0-9]{4,18}$/.test(trimmed) && trimmed.length < 4) {
-      setErrorMsg('Enter a valid Leader Code (e.g. PP483921).');
+    if (!/^[A-Z0-9]{3,20}$/.test(trimmed)) {
+      setErrorMsg('Enter a valid Leader Code (e.g. PRIYA369, ANSHU195).');
       return;
     }
 
@@ -180,7 +195,7 @@ export function EditTeamLeaderModal({
                 type="text"
                 value={leaderCode}
                 onChange={handleCodeChange}
-                placeholder="e.g. PP483921"
+                placeholder="e.g. PRIYA369"
                 maxLength={20}
                 disabled={hasExistingCode}
                 readOnly={hasExistingCode}
@@ -201,7 +216,7 @@ export function EditTeamLeaderModal({
             <p className="text-[11px] text-[var(--text-secondary)]">
               {hasExistingCode
                 ? 'Leader Code is permanent for this Team Leader and cannot be changed.'
-                : 'Format: Starts with PP (e.g. PP483921). Permanent once saved.'}
+                : 'Format: Memorable name code (e.g. PRIYA369, ANSHU195). Permanent once saved.'}
             </p>
           </div>
 

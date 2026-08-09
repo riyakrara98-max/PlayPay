@@ -9,6 +9,7 @@ export interface EmptyStateProps {
   description?: string;
   primaryAction?: React.ReactNode;
   secondaryAction?: React.ReactNode;
+  action?: React.ReactNode;
   className?: string;
 }
 
@@ -18,8 +19,10 @@ export function EmptyState({
   description,
   primaryAction,
   secondaryAction,
+  action,
   className,
 }: EmptyStateProps) {
+  const effectivePrimaryAction = primaryAction || action;
   return (
     <div
       className={cn(
@@ -38,10 +41,10 @@ export function EmptyState({
           {description}
         </p>
       )}
-      {(primaryAction || secondaryAction) && (
+      {(effectivePrimaryAction || secondaryAction) && (
         <div className="flex items-center gap-3 flex-wrap justify-center">
           {secondaryAction}
-          {primaryAction}
+          {effectivePrimaryAction}
         </div>
       )}
     </div>

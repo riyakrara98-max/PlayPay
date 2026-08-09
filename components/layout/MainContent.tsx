@@ -21,7 +21,7 @@ export function MainContent({
       tabIndex={-1}
       className={cn(
         'flex-1 w-full focus:outline-none transition-all',
-        hasBottomNav && 'pb-20 md:pb-6',
+        hasBottomNav && 'pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:pb-6',
         className
       )}
       {...props}

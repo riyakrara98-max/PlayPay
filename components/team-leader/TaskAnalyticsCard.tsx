@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
+import { parseDateInput } from '@/utils/formatters';
 import { 
   Users, 
   CheckCircle2, 
@@ -24,6 +25,9 @@ export function TaskAnalyticsCard({ task }: TaskAnalyticsCardProps) {
   const isConfigured = task.rewardConfigured;
   const isActive = task.assignmentStatus === 'active';
   
+  const assignedDate = parseDateInput(task.assignedAt);
+  const activityDate = parseDateInput(task.lastActivity);
+
   return (
     <Card className="flex flex-col bg-[var(--bg-card,#1e293b)] border-[var(--border-color,rgba(255,255,255,0.1))] overflow-hidden">
       <div className="p-5 flex-1">
@@ -117,9 +121,9 @@ export function TaskAnalyticsCard({ task }: TaskAnalyticsCardProps) {
         </div>
 
         <div className="flex justify-between items-center text-[10px] text-slate-500">
-          <span>Assigned: {task.assignedAt ? format(new Date(task.assignedAt), 'MMM d, yyyy') : 'Unknown'}</span>
-          {task.lastActivity && (
-            <span>Activity: {format(new Date(task.lastActivity), 'MMM d')}</span>
+          <span>Assigned: {assignedDate ? format(assignedDate, 'MMM d, yyyy') : 'Unknown'}</span>
+          {activityDate && (
+            <span>Activity: {format(activityDate, 'MMM d')}</span>
           )}
         </div>
       </div>

@@ -2,6 +2,7 @@ import React from 'react';
 import Image from 'next/image';
 import { format } from 'date-fns';
 import { AssignedTask } from '@/hooks/useTeamLeaderAssignedTasks';
+import { parseDateInput } from '@/utils/formatters';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -91,7 +92,10 @@ export function AssignedTaskCard({ assignedTask, onConfigureReward }: AssignedTa
         </div>
         
         <div className="text-[10px] text-slate-500 mb-2">
-          Assigned: {assignment.assignedAt ? format(new Date(assignment.assignedAt), 'MMM d, yyyy') : 'Unknown'}
+          Assigned: {(() => {
+            const d = parseDateInput(assignment.assignedAt);
+            return d ? format(d, 'MMM d, yyyy') : 'Unknown';
+          })()}
         </div>
       </div>
 

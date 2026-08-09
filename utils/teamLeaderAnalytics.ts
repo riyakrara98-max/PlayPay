@@ -184,11 +184,11 @@ export function calculateTeamLeaderAnalytics(
       
       const actTime = e.submittedAt || e.enrolledAt;
       if (actTime && lastActivityTime) {
-         if (new Date(actTime).getTime() > new Date(lastActivityTime).getTime()) {
-             lastActivityTime = actTime;
-         }
+        if (getSafeTime(actTime) > getSafeTime(lastActivityTime)) {
+          lastActivityTime = actTime;
+        }
       } else if (actTime) {
-         lastActivityTime = actTime;
+        lastActivityTime = actTime;
       }
     });
     

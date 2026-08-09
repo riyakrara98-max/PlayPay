@@ -5,7 +5,7 @@ import { X } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { ComponentSize } from '@/types/ui';
 
-export type BadgeVariant = 'primary' | 'secondary' | 'accent' | 'success' | 'warning' | 'danger' | 'outline' | 'ghost';
+export type BadgeVariant = 'primary' | 'secondary' | 'accent' | 'success' | 'warning' | 'danger' | 'outline' | 'ghost' | 'neutral';
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> {
   variant?: BadgeVariant;
@@ -33,6 +33,7 @@ export function Badge({
     danger: 'bg-[var(--danger)]/15 text-[var(--danger)] border-[var(--danger)]/30',
     outline: 'bg-transparent text-[var(--text-primary)] border-[var(--border)]',
     ghost: 'bg-transparent text-[var(--text-secondary)] border-transparent',
+    neutral: 'bg-slate-800/60 text-slate-300 border-slate-700/50',
   };
 
   const dotColors: Record<BadgeVariant, string> = {
@@ -44,6 +45,7 @@ export function Badge({
     danger: 'bg-[var(--danger)]',
     outline: 'bg-[var(--text-primary)]',
     ghost: 'bg-[var(--text-secondary)]',
+    neutral: 'bg-slate-400',
   };
 
   const sizeStyles: Record<ComponentSize, string> = {
