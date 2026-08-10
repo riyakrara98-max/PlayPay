@@ -28,6 +28,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettingsDocument = {
   heroBgImageUrl: '',
   heroStartDate: '',
   heroEndDate: '',
+  settingsVersion: 0,
   updatedAt: new Date().toISOString(),
 };
 
@@ -94,6 +95,7 @@ export function SiteSettingsProvider({ children }: SiteSettingsProviderProps) {
               heroBgImageUrl: data.heroBgImageUrl || '',
               heroStartDate: data.heroStartDate || '',
               heroEndDate: data.heroEndDate || '',
+              settingsVersion: data.settingsVersion ?? 0,
               updatedAt: data.updatedAt || DEFAULT_SITE_SETTINGS.updatedAt,
               updatedBy: data.updatedBy,
             });

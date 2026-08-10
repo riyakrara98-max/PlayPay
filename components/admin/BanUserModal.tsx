@@ -11,13 +11,15 @@ interface BanUserModalProps {
   isOpen: boolean;
   onClose: () => void;
   user: UserDocument | null;
-  onConfirmBan: (userId: string, reason: string) => Promise<void>;
+  onConfirm?: (userId: string, reason: string) => Promise<void>;
+  onConfirmBan?: (userId: string, reason: string) => Promise<void>;
 }
 
 export function BanUserModal({
   isOpen,
   onClose,
   user,
+  onConfirm,
   onConfirmBan,
 }: BanUserModalProps) {
   const [reason, setReason] = useState('');
@@ -47,7 +49,10 @@ export function BanUserModal({
     setError(null);
 
     try {
-      await onConfirmBan(user.uid, reason.trim());
+      const handler = onConfirm || onConfirmBan;
+      if (handler) {
+        await handler(user.uid, reason.trim());
+      }
       onClose();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to ban user account';

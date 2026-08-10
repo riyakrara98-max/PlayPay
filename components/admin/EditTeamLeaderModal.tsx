@@ -7,6 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { UserDocument } from '@/types/firestore';
 import { useToast } from '@/hooks/use-toast';
+import { generateLeaderCode } from '@/lib/leader-code-generator';
+
+export { generateLeaderCode };
 
 interface EditTeamLeaderModalProps {
   isOpen: boolean;
@@ -19,35 +22,6 @@ interface EditTeamLeaderModalProps {
     isLeaderActive: boolean,
     memberType?: 'team_leader' | 'direct' | 'pending' | 'team_member'
   ) => Promise<void>;
-}
-
-export function generateLeaderCode(
-  existingUsers: UserDocument[],
-  user?: UserDocument | null
-): string {
-  // Extract clean A-Z letters from displayName or email
-  const rawName = (user?.displayName || user?.email?.split('@')[0] || 'LEADER').trim();
-  let nameLetters = rawName.toUpperCase().replace(/[^A-Z]/g, '');
-
-  if (nameLetters.length < 3) {
-    nameLetters = (nameLetters + 'LEADER').slice(0, 5);
-  } else if (nameLetters.length > 6) {
-    nameLetters = nameLetters.slice(0, 5);
-  }
-
-  const existingCodes = new Set(
-    existingUsers.map((u) => u.leaderCode?.toUpperCase()).filter(Boolean)
-  );
-
-  let code = '';
-  let attempts = 0;
-  do {
-    const randomDigits = Math.floor(100 + Math.random() * 900).toString();
-    code = `${nameLetters}${randomDigits}`;
-    attempts++;
-  } while (existingCodes.has(code) && attempts < 200);
-
-  return code;
 }
 
 export function EditTeamLeaderModal({
@@ -88,7 +62,6 @@ export function EditTeamLeaderModal({
   const isExistingLeader = user.memberType === 'team_leader';
 
   const handleAutoGenerate = () => {
-    if (hasExistingCode) return;
     const newCode = generateLeaderCode(existingUsers, user);
     setLeaderCode(newCode);
     setErrorMsg(null);
@@ -176,18 +149,16 @@ export function EditTeamLeaderModal({
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="block text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">
-                Leader Code {hasExistingCode && <span className="text-[var(--primary)] font-normal ml-1">(Permanent)</span>}
+                Leader Code
               </label>
-              {!hasExistingCode && (
-                <button
-                  type="button"
-                  onClick={handleAutoGenerate}
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--primary)] hover:underline cursor-pointer"
-                >
-                  <RefreshCw className="w-3 h-3 shrink-0" />
-                  <span>Auto Generate</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleAutoGenerate}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--primary)] hover:underline cursor-pointer"
+              >
+                <RefreshCw className="w-3 h-3 shrink-0" />
+                <span>{hasExistingCode ? 'Regenerate Code' : 'Auto Generate'}</span>
+              </button>
             </div>
 
             <div className="relative flex items-center">
@@ -195,13 +166,9 @@ export function EditTeamLeaderModal({
                 type="text"
                 value={leaderCode}
                 onChange={handleCodeChange}
-                placeholder="e.g. PRIYA369"
+                placeholder="e.g. PRIYA482"
                 maxLength={20}
-                disabled={hasExistingCode}
-                readOnly={hasExistingCode}
-                className={`font-mono text-base font-bold uppercase tracking-wider pr-20 ${
-                  hasExistingCode ? 'bg-[var(--bg-muted)] opacity-90 cursor-not-allowed select-all' : ''
-                }`}
+                className="font-mono text-base font-bold uppercase tracking-wider pr-20"
               />
               <button
                 type="button"
@@ -214,9 +181,7 @@ export function EditTeamLeaderModal({
               </button>
             </div>
             <p className="text-[11px] text-[var(--text-secondary)]">
-              {hasExistingCode
-                ? 'Leader Code is permanent for this Team Leader and cannot be changed.'
-                : 'Format: Memorable name code (e.g. PRIYA369, ANSHU195). Permanent once saved.'}
+              Format: NAME + 3 DIGITS (e.g. PRIYA482, ANSHU195, RAHUL731).
             </p>
           </div>
 

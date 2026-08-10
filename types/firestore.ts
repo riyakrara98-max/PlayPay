@@ -221,6 +221,7 @@ export type AuditActivityType =
   | 'User Unbanned'
   | 'User Deactivated'
   | 'User Reactivated'
+  | 'User Profile Updated'
   | 'Task Created'
   | 'Task Updated'
   | 'Task Deleted'

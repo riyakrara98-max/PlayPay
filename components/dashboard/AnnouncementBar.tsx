@@ -1,8 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Megaphone, Sparkles, Flame, Zap, ShieldAlert, CheckCircle2, ChevronRight } from 'lucide-react';
+import React, { useMemo } from 'react';
 import { useSiteSettings } from '@/hooks/useSiteSettings';
 import { useLiveTasks } from '@/hooks/useLiveTasks';
 import { useAuthContext } from '@/contexts/AuthContext';
@@ -19,13 +17,21 @@ export interface NoticeItem {
   link?: string;
 }
 
+/**
+  * Utility to strip all emojis and special pictogram characters from text
+  */
+function stripEmojis(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/\p{Extended_Pictographic}|\p{Emoji_Presentation}/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function AnnouncementBar() {
   const { settings } = useSiteSettings();
   const { tasks } = useLiveTasks();
   const { currentUser, userProfile } = useAuthContext();
-
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isHovered, setIsHovered] = useState(false);
 
   // Compile prioritized notice list
   const notices = useMemo(() => {
@@ -33,48 +39,53 @@ export function AnnouncementBar() {
 
     // 1. Priority 1: Emergency Admin Notices
     if (settings?.maintenanceMode) {
-      list.push({
-        id: 'emerg-maint',
-        priority: 1,
-        type: 'emergency',
-        title: 'Maintenance Alert',
-        text: settings.maintenanceMessage || 'System undergoing scheduled maintenance optimization.',
-        badgeText: 'Emergency',
-        badgeVariant: 'danger',
-      });
+      const cleanMaint = stripEmojis(settings.maintenanceMessage || 'System undergoing scheduled maintenance optimization.');
+      if (cleanMaint) {
+        list.push({
+          id: 'emerg-maint',
+          priority: 1,
+          type: 'emergency',
+          title: 'Maintenance Alert',
+          text: cleanMaint,
+          badgeText: 'EMERGENCY',
+          badgeVariant: 'danger',
+        });
+      }
     }
 
-    const cmsAnnouncement = settings?.announcement?.trim();
-    if (cmsAnnouncement && (cmsAnnouncement.startsWith('🚨') || cmsAnnouncement.toLowerCase().includes('emergency') || cmsAnnouncement.toLowerCase().includes('urgent'))) {
+    const rawCmsAnnouncement = settings?.announcement?.trim() || '';
+    const cleanCmsAnnouncement = stripEmojis(rawCmsAnnouncement);
+
+    if (cleanCmsAnnouncement && (rawCmsAnnouncement.includes('emergency') || rawCmsAnnouncement.includes('urgent'))) {
       list.push({
         id: 'emerg-cms',
         priority: 1,
         type: 'emergency',
         title: 'Security Alert',
-        text: cmsAnnouncement,
-        badgeText: 'Urgent',
+        text: cleanCmsAnnouncement,
+        badgeText: 'URGENT',
         badgeVariant: 'danger',
       });
     }
 
     // 2. Priority 2: Normal Admin CMS Notices
-    if (cmsAnnouncement && !cmsAnnouncement.startsWith('🚨') && !cmsAnnouncement.toLowerCase().includes('emergency')) {
+    if (cleanCmsAnnouncement && !rawCmsAnnouncement.includes('emergency') && !rawCmsAnnouncement.includes('urgent')) {
       list.push({
         id: 'cms-notice',
         priority: 2,
         type: 'cms',
         title: 'Announcement',
-        text: cmsAnnouncement,
-        badgeText: 'Notice',
+        text: cleanCmsAnnouncement,
+        badgeText: 'NOTICE',
         badgeVariant: 'primary',
       });
     }
 
-    // 3. Priority 3: Automatic Task Notices (active, unexpired tasks)
+    // 3. Priority 3: Automatic Task Notices (active tasks)
     const activeTasks = tasks.filter((t) => t.status === 'active');
     activeTasks.forEach((task) => {
       const reward = task.rewardAmount || 15;
-      const appName = task.appName || task.title || 'App Review';
+      const appName = stripEmojis(task.appName || task.title || 'App Review');
 
       if (reward >= 25) {
         list.push({
@@ -82,8 +93,8 @@ export function AnnouncementBar() {
           priority: 3,
           type: 'task',
           title: 'High Reward Campaign',
-          text: `🎉 High Reward: ₹${reward} cash payout for reviewing ${appName}!`,
-          badgeText: 'High Pay',
+          text: `High Reward: ₹${reward} cash payout for reviewing ${appName}!`,
+          badgeText: 'HIGH PAY',
           badgeVariant: 'success',
           link: '#tasks-marketplace',
         });
@@ -93,8 +104,8 @@ export function AnnouncementBar() {
           priority: 3,
           type: 'task',
           title: 'New Task Live',
-          text: `⚡ ${appName} review task available now — Earn ₹${reward} direct UPI cash!`,
-          badgeText: 'Live Task',
+          text: `${appName} review task available now — Earn ₹${reward} direct UPI cash!`,
+          badgeText: 'LIVE TASK',
           badgeVariant: 'warning',
           link: '#tasks-marketplace',
         });
@@ -109,8 +120,8 @@ export function AnnouncementBar() {
           priority: 4,
           type: 'user',
           title: 'Setup Payouts',
-          text: '📢 Add your UPI ID in Profile to enable instant direct cash payouts.',
-          badgeText: 'Action',
+          text: 'Add your UPI ID in Profile to enable instant direct cash payouts.',
+          badgeText: 'ACTION',
           badgeVariant: 'warning',
           link: '/profile',
         });
@@ -120,99 +131,57 @@ export function AnnouncementBar() {
           priority: 4,
           type: 'user',
           title: 'Verified Earner',
-          text: `💰 Total Cash Earned: ₹${userProfile.totalEarned}. Keep reviewing apps to earn more!`,
-          badgeText: 'Earnings',
+          text: `Total Cash Earned: ₹${userProfile.totalEarned}. Keep reviewing apps to earn more!`,
+          badgeText: 'EARNINGS',
           badgeVariant: 'success',
           link: '/payment',
         });
       }
     }
 
-    // Sort strictly by priority order (1 -> 2 -> 3 -> 4)
+    // Sort strictly by priority order
     return list.sort((a, b) => a.priority - b.priority);
   }, [settings, tasks, currentUser, userProfile]);
 
-  // Handle Rotation Timer
-  useEffect(() => {
-    if (notices.length <= 1 || isHovered) return;
-
-    const interval = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % notices.length);
-    }, 7000);
-
-    return () => clearInterval(interval);
-  }, [notices.length, isHovered]);
-
-  // Adjust index if out of bounds
-  const currentNotice = notices[currentIndex % Math.max(1, notices.length)];
-
-  if (notices.length === 0 || !currentNotice) {
+  if (notices.length === 0) {
     return null;
   }
 
-  const handleNoticeClick = () => {
-    if (currentNotice.link) {
-      if (currentNotice.link.startsWith('#')) {
-        const el = document.getElementById(currentNotice.link.replace('#', ''));
-        if (el) el.scrollIntoView({ behavior: 'smooth' });
-      } else {
-        window.location.href = currentNotice.link;
-      }
-    }
-  };
+  // Combine notice texts into marquee stream without emojis or icons
+  const combinedText = notices.map((n) => n.text).join('   •   ');
+
+  // Badge variant based on highest priority notice
+  const highestPriority = notices[0];
+  const badgeText = highestPriority.priority === 1 ? 'URGENT' : 'ANNOUNCEMENT';
+  const badgeVariant = highestPriority.priority === 1 ? 'danger' : 'primary';
 
   return (
     <div
-      aria-label="Smart prioritized notice feed"
-      className="w-full bg-gradient-to-r from-[var(--surface-elevated)] via-[var(--surface)] to-[var(--surface-elevated)] border-b border-[var(--border)] text-[var(--text-primary)] text-xs font-medium py-2 px-4 relative overflow-hidden flex items-center justify-between gap-2 shadow-2xs select-none"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      aria-label="Scrolling Announcement Marquee"
+      className="w-full bg-[var(--surface-elevated)] border-b border-[var(--border)] text-[var(--text-primary)] text-xs font-medium py-2 px-4 relative overflow-hidden flex items-center gap-3 shadow-2xs select-none group"
     >
-      <div className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer" onClick={handleNoticeClick}>
-        {/* Badge Indicator */}
-        <Badge
-          variant={currentNotice.badgeVariant}
-          size="sm"
-          className="z-10 shrink-0 font-bold tracking-tight shadow-xs flex items-center gap-1"
-        >
-          {currentNotice.priority === 1 ? (
-            <ShieldAlert className="w-3.5 h-3.5 animate-pulse shrink-0" />
-          ) : currentNotice.type === 'task' ? (
-            <Flame className="w-3.5 h-3.5 fill-current shrink-0" />
-          ) : currentNotice.type === 'user' ? (
-            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-          ) : (
-            <Megaphone className="w-3.5 h-3.5 shrink-0" />
-          )}
-          <span>{currentNotice.badgeText}</span>
-        </Badge>
+      {/* Pure Text Badge (No Icons) */}
+      <Badge
+        variant={badgeVariant}
+        size="sm"
+        className="z-10 shrink-0 font-bold tracking-wider text-[10px] uppercase px-2.5 py-0.5 shadow-xs"
+      >
+        {badgeText}
+      </Badge>
 
-        {/* Animated Notice Text */}
-        <div className="min-w-0 flex-1 overflow-hidden h-5 relative flex items-center">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentNotice.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.3 }}
-              className="truncate text-xs font-semibold text-[var(--text-primary)] flex items-center gap-1.5"
-            >
-              <span className="truncate">{currentNotice.text}</span>
-            </motion.div>
-          </AnimatePresence>
+      {/* Scrolling Marquee Container */}
+      <div className="overflow-hidden relative flex-1 flex items-center">
+        <div className="inline-flex whitespace-nowrap animate-marquee group-hover:[animation-play-state:paused] gap-12">
+          <span className="font-semibold text-xs text-[var(--text-primary)]">
+            {combinedText} &nbsp;&nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;&nbsp;
+          </span>
+          <span className="font-semibold text-xs text-[var(--text-primary)]">
+            {combinedText} &nbsp;&nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;&nbsp;
+          </span>
         </div>
       </div>
-
-      {/* Ticker Counter / Link */}
-      {notices.length > 1 && (
-        <div className="flex items-center gap-1 shrink-0 text-[10px] font-mono font-bold text-[var(--text-muted)] bg-[var(--bg-muted)] px-2 py-0.5 rounded-[var(--radius-pill)] border border-[var(--border)]">
-          <span>{currentIndex + 1}</span>
-          <span>/</span>
-          <span>{notices.length}</span>
-        </div>
-      )}
     </div>
   );
 }
+
 

@@ -26,6 +26,7 @@ import {
 import { logAdminActivity } from '@/lib/audit-logger';
 import { useToast } from '@/hooks/use-toast';
 import { getSafeTime } from '@/utils/formatters';
+import { generateLeaderCode } from '@/lib/leader-code-generator';
 
 export type UserFilterStatus =
   | 'all'
@@ -399,12 +400,13 @@ export function useAdminUsers(adminUid?: string, adminName?: string, adminEmail?
           }
         }
 
-        // Permanent Leader Code Rule:
-        // Always preserve existing leaderCode if user already has one. Generate/use new code ONLY if leaderCode is null/empty.
-        const existingCode = targetUser?.leaderCode?.trim().toUpperCase();
-        const finalLeaderCode = (existingCode && existingCode.length > 0)
-          ? existingCode
-          : leaderCode.trim().toUpperCase();
+        // Leader Code Resolution Rule:
+        // 1. Use passed leaderCode if explicitly provided
+        // 2. Fallback to existing user leaderCode if available
+        // 3. Fallback to auto-generating a new code in NAME + 3 DIGITS format
+        const existingCode = targetUser?.leaderCode?.trim().toUpperCase() || '';
+        const providedCode = leaderCode ? leaderCode.trim().toUpperCase() : '';
+        const finalLeaderCode = providedCode || existingCode || generateLeaderCode(users, targetUser);
 
         const oldCode = existingCode;
 

@@ -9,17 +9,16 @@ import {
   where,
   orderBy,
   limit,
+  getCountFromServer,
+  Timestamp,
 } from 'firebase/firestore';
 import { getFirebaseDb } from '@/firebase/config';
 import {
-  UserDocument,
-  TaskDocument,
   EnrollmentDocument,
   SiteSettingsDocument,
   FIRESTORE_COLLECTIONS,
 } from '@/types/firestore';
 import { useAuth } from '@/hooks/useAuth';
-import { getSafeTime } from '@/utils/formatters';
 
 export interface AdminStats {
   totalUsers: number;
@@ -63,11 +62,56 @@ export function useAdminDashboardData(): AdminDashboardData {
   );
   const [refreshKey, setRefreshKey] = useState<number>(0);
 
+  const fetchCounts = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      const db = getFirebaseDb();
+      const usersCol = collection(db, FIRESTORE_COLLECTIONS.USERS);
+      const tasksCol = collection(db, FIRESTORE_COLLECTIONS.TASKS);
+      const enrollmentsCol = collection(db, FIRESTORE_COLLECTIONS.ENROLLMENTS);
+
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      const [
+        totalUsersSnap,
+        activeTasksSnap,
+        pendingSnap,
+        approvedSnap,
+        todaySnap,
+        paymentReqSnap,
+      ] = await Promise.all([
+        getCountFromServer(usersCol),
+        getCountFromServer(query(tasksCol, where('status', '==', 'active'))),
+        getCountFromServer(query(enrollmentsCol, where('status', '==', 'pending'))),
+        getCountFromServer(query(enrollmentsCol, where('status', '==', 'approved'))),
+        getCountFromServer(query(enrollmentsCol, where('enrolledAt', '>=', Timestamp.fromDate(startOfToday)))),
+        getCountFromServer(query(enrollmentsCol, where('paymentStatus', '==', 'requested'))),
+      ]);
+
+      setStats({
+        totalUsers: totalUsersSnap.data().count,
+        activeTasks: activeTasksSnap.data().count,
+        pendingSubmissions: pendingSnap.data().count,
+        approvedTasks: approvedSnap.data().count,
+        todaysEnrollments: todaySnap.data().count,
+        eligiblePaymentRequests: paymentReqSnap.data().count,
+      });
+      setError(null);
+      setLoading(false);
+    } catch (err) {
+      console.error('[Admin Dashboard] Aggregation fetch error:', err);
+      setError('Failed to sync dashboard metrics.');
+      setLoading(false);
+    }
+  }, [isAdmin]);
+
   const refetch = useCallback(() => {
     setError(null);
     setLoading(true);
+    fetchCounts();
     setRefreshKey((prev) => prev + 1);
-  }, []);
+  }, [fetchCounts]);
 
   // Online / Offline listener
   useEffect(() => {
@@ -87,6 +131,14 @@ export function useAdminDashboardData(): AdminDashboardData {
     };
   }, []);
 
+  // Fetch counts on mount and refreshKey change
+  useEffect(() => {
+    if (isAdmin) {
+      fetchCounts();
+    }
+  }, [isAdmin, refreshKey, fetchCounts]);
+
+  // Realtime listeners for bounded recent activity and site settings
   useEffect(() => {
     if (!isAdmin) {
       queueMicrotask(() => {
@@ -95,102 +147,14 @@ export function useAdminDashboardData(): AdminDashboardData {
       return;
     }
 
-    let unsubUsers: (() => void) | null = null;
-    let unsubTasks: (() => void) | null = null;
-    let unsubEnrollments: (() => void) | null = null;
     let unsubRecent: (() => void) | null = null;
     let unsubSettings: (() => void) | null = null;
 
     try {
       const db = getFirebaseDb();
-
-      // 1. Listen to Users collection
-      const usersCol = collection(db, FIRESTORE_COLLECTIONS.USERS);
-      unsubUsers = onSnapshot(
-        usersCol,
-        (snap) => {
-          const userCount = snap.size;
-          setStats((prev) => ({ ...prev, totalUsers: userCount }));
-        },
-        (err) => {
-          console.error('[Admin Dashboard] Users snapshot error:', err);
-          setError('Failed to sync users count.');
-        }
-      );
-
-      // 2. Listen to Active Tasks collection
-      const tasksCol = collection(db, FIRESTORE_COLLECTIONS.TASKS);
-      const activeTasksQuery = query(tasksCol, where('status', '==', 'active'));
-      unsubTasks = onSnapshot(
-        activeTasksQuery,
-        (snap) => {
-          setStats((prev) => ({ ...prev, activeTasks: snap.size }));
-        },
-        (err) => {
-          console.error('[Admin Dashboard] Tasks snapshot error:', err);
-          setError('Failed to sync active tasks.');
-        }
-      );
-
-      // 3. Listen to Enrollments collection (for all enrollment stats)
       const enrollmentsCol = collection(db, FIRESTORE_COLLECTIONS.ENROLLMENTS);
 
-      // Calculate start of today in ISO format (00:00:00.000 local time)
-      const now = new Date();
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-
-      unsubEnrollments = onSnapshot(
-        enrollmentsCol,
-        (snap) => {
-          let pendingCount = 0;
-          let approvedCount = 0;
-          let todayCount = 0;
-          let paymentReqCount = 0;
-
-          snap.docs.forEach((docSnap) => {
-            const data = docSnap.data() as EnrollmentDocument;
-
-            // Pending Submissions
-            if (data.status === 'pending') {
-              pendingCount++;
-            }
-
-            // Approved Tasks
-            if (data.status === 'approved') {
-              approvedCount++;
-            }
-
-            // Today's Enrollments
-            if (data.enrolledAt) {
-              const enrolledTime = getSafeTime(data.enrolledAt);
-              if (!isNaN(enrolledTime) && enrolledTime >= startOfToday) {
-                todayCount++;
-              }
-            }
-
-            // Eligible Payment Requests
-            if (data.paymentStatus === 'requested') {
-              paymentReqCount++;
-            }
-          });
-
-          setStats((prev) => ({
-            ...prev,
-            pendingSubmissions: pendingCount,
-            approvedTasks: approvedCount,
-            todaysEnrollments: todayCount,
-            eligiblePaymentRequests: paymentReqCount,
-          }));
-          setLoading(false);
-        },
-        (err) => {
-          console.error('[Admin Dashboard] Enrollments snapshot error:', err);
-          setError('Failed to sync enrollment metrics.');
-          setLoading(false);
-        }
-      );
-
-      // 4. Listen to Recent 10 Activity items
+      // Bounded Query: Listen to top 10 Recent Activity items only
       const recentQuery = query(
         enrollmentsCol,
         orderBy('enrolledAt', 'desc'),
@@ -205,13 +169,15 @@ export function useAdminDashboardData(): AdminDashboardData {
             ...(d.data() as Omit<EnrollmentDocument, 'id'>),
           }));
           setRecentActivity(activities);
+          // Refresh counts when activity changes
+          fetchCounts();
         },
         (err) => {
           console.error('[Admin Dashboard] Recent activity snapshot error:', err);
         }
       );
 
-      // 5. Listen to Site Settings / global
+      // Single Document Query: Listen to global Site Settings
       const settingsRef = doc(db, FIRESTORE_COLLECTIONS.SITE_SETTINGS, 'global');
       unsubSettings = onSnapshot(
         settingsRef,
@@ -236,13 +202,10 @@ export function useAdminDashboardData(): AdminDashboardData {
     }
 
     return () => {
-      if (unsubUsers) unsubUsers();
-      if (unsubTasks) unsubTasks();
-      if (unsubEnrollments) unsubEnrollments();
       if (unsubRecent) unsubRecent();
       if (unsubSettings) unsubSettings();
     };
-  }, [isAdmin, refreshKey]);
+  }, [isAdmin, fetchCounts]);
 
   return useMemo(
     () => ({
