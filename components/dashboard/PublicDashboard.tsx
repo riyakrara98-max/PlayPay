@@ -9,9 +9,11 @@ import {
   Sparkles,
   ChevronDown,
   CheckCircle2,
+  Search,
 } from 'lucide-react';
 import { AnnouncementBar } from '@/components/dashboard/AnnouncementBar';
 import { TaskCard } from '@/components/tasks/TaskCard';
+import { SearchOverlayModal } from '@/components/tasks/SearchOverlayModal';
 import { useLiveTasks } from '@/hooks/useLiveTasks';
 import { useSiteSettings } from '@/hooks/useSiteSettings';
 import { TaskGridSkeleton } from '@/components/tasks/TaskCardSkeleton';
@@ -25,6 +27,7 @@ export function PublicDashboard() {
   const { tasks, loading, error, refetch } = useLiveTasks();
   const { settings } = useSiteSettings();
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_COUNT);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   // Evaluate CMS-driven Hero Visibility & Dates
   const isHeroActive = useMemo(() => {
@@ -166,6 +169,25 @@ export function PublicDashboard() {
           id="tasks-marketplace"
           className="w-full max-w-5xl mx-auto px-4 sm:px-6 pt-6 space-y-4 scroll-mt-16"
         >
+          {/* Quick Search Bar Trigger for Mobile Users */}
+          <div className="w-full">
+            <button
+              type="button"
+              onClick={() => setSearchOpen(true)}
+              className="w-full flex items-center justify-between px-4 py-3 bg-[var(--surface-elevated)] border border-[var(--border)] hover:border-[var(--primary)]/50 rounded-[var(--radius-xl)] shadow-2xs text-left group transition-all duration-200 min-h-[48px]"
+            >
+              <div className="flex items-center gap-3">
+                <Search className="w-5 h-5 text-[var(--primary)] group-hover:scale-110 transition-transform shrink-0" />
+                <span className="text-xs sm:text-sm font-medium text-[var(--text-muted)] group-hover:text-[var(--text-primary)] transition-colors">
+                  Search app review tasks, highest pay, games...
+                </span>
+              </div>
+              <Badge variant="primary" size="sm" className="hidden sm:inline-flex font-bold">
+                Tap to Search
+              </Badge>
+            </button>
+          </div>
+
           {/* Section Header */}
           <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
             <div>
@@ -197,7 +219,7 @@ export function PublicDashboard() {
             /* Clean Empty State */
             <div className="py-14 px-4 text-center bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius-xl)] my-4 space-y-2">
               <div className="w-12 h-12 rounded-full bg-[var(--primary)]/10 text-[var(--primary)] flex items-center justify-center mx-auto text-2xl">
-                🎉
+                
               </div>
               <h3 className="text-base font-extrabold text-[var(--text-primary)]">You&apos;re all caught up!</h3>
               <p className="text-xs text-[var(--text-secondary)] max-w-sm mx-auto font-medium">
@@ -240,6 +262,12 @@ export function PublicDashboard() {
           <p>© {new Date().getFullYear()} PlayPay. All rights reserved.</p>
         </div>
       </footer>
+
+      {/* Global Search Overlay Modal */}
+      <SearchOverlayModal
+        isOpen={searchOpen}
+        onClose={() => setSearchOpen(false)}
+      />
     </div>
   );
 }

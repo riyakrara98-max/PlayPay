@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { getFirebaseDb } from '@/firebase/config';
+import { getFirebaseDb, getFirebaseAuth } from '@/firebase/config';
 import { EnrollmentDocument, FIRESTORE_COLLECTIONS } from '@/types/firestore';
 import { useAuthContext } from '@/contexts/AuthContext';
 
@@ -30,6 +30,11 @@ function initUserEnrollmentsListener(uid: string) {
   if (cleanupTimer) {
     clearTimeout(cleanupTimer);
     cleanupTimer = null;
+  }
+
+  const auth = getFirebaseAuth();
+  if (!auth.currentUser || auth.currentUser.uid !== uid) {
+    return;
   }
 
   if (activeUid === uid && firestoreUnsub) {
@@ -71,14 +76,13 @@ function initUserEnrollmentsListener(uid: string) {
         notifySubscribers();
       },
       (err) => {
-        console.error('[useEnrollmentStatus] Firestore listener error:', err);
+        // Quietly store error for caller rather than logging unneeded permission errors on logout
         storeError = err.message || 'Failed to fetch enrollment status.';
         storeLoading = false;
         notifySubscribers();
       }
     );
   } catch (err) {
-    console.error('[useEnrollmentStatus] Failed to initialize listener:', err);
     storeError = err instanceof Error ? err.message : 'Error connecting to Firestore.';
     storeLoading = false;
     notifySubscribers();
@@ -93,6 +97,12 @@ export function useEnrollmentStatus(taskId: string): UseEnrollmentStatusResult {
 
   useEffect(() => {
     if (!uid) {
+      if (firestoreUnsub) {
+        firestoreUnsub();
+        firestoreUnsub = null;
+        activeUid = null;
+        enrollmentsMap = new Map();
+      }
       return;
     }
 

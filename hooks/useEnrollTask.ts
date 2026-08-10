@@ -389,9 +389,26 @@ export function useEnrollTask() {
 
   // Auto-resume pending enrollment when user authenticates
   useEffect(() => {
-    if (currentUser?.uid && pendingTaskId) {
-      const taskIdToEnroll = pendingTaskId;
+    let taskIdToEnroll = pendingTaskId;
+
+    if (!taskIdToEnroll && typeof window !== 'undefined') {
+      try {
+        taskIdToEnroll = sessionStorage.getItem('playpay_pending_task_id');
+      } catch {}
+
+      if (!taskIdToEnroll) {
+        const params = new URLSearchParams(window.location.search);
+        taskIdToEnroll = params.get('pendingTaskId');
+      }
+    }
+
+    if (currentUser?.uid && taskIdToEnroll) {
       clearPendingTask();
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.removeItem('playpay_pending_task_id');
+        } catch {}
+      }
       queueMicrotask(() => {
         enrollTask(taskIdToEnroll);
       });

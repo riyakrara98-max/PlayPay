@@ -13,8 +13,10 @@ import {
   MessageSquare,
   Zap,
 } from 'lucide-react';
+import { useRouter, usePathname } from 'next/navigation';
 import { TaskDocument } from '@/types/firestore';
 import { useAuthContext } from '@/contexts/AuthContext';
+import { useAuthModal } from '@/contexts/AuthModalContext';
 import { useCountdown } from '@/hooks/useCountdown';
 import { useEnrollTask } from '@/hooks/useEnrollTask';
 import { useEnrollmentStatus } from '@/hooks/useEnrollmentStatus';
@@ -34,7 +36,10 @@ function TaskDetailsContent({
   task: TaskDocument;
   onClose: () => void;
 }) {
-  const { userProfile } = useAuthContext();
+  const router = useRouter();
+  const pathname = usePathname();
+  const { currentUser, userProfile } = useAuthContext();
+  const { openAuthModal } = useAuthModal();
   const { isEnrolled, enrollment } = useEnrollmentStatus(task.id);
   const { enrollTask, isEnrolling } = useEnrollTask();
   const availability = useTaskAvailability(task, isEnrolled);
@@ -51,6 +56,13 @@ function TaskDetailsContent({
   } = availability;
 
   const handleEnrollClick = async () => {
+    if (!currentUser) {
+      openAuthModal(task.id);
+      onClose();
+      const targetPath = pathname || '/dashboard';
+      router.push(`/login?redirectTo=${encodeURIComponent(targetPath)}&pendingTaskId=${task.id}`);
+      return;
+    }
     if (isEnrolled) {
       window.location.href = `/my-tasks/${enrollment?.id}`;
       return;

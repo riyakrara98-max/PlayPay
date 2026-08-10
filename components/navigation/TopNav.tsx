@@ -17,6 +17,7 @@ import {
   CheckSquare,
   CreditCard,
   Search,
+  HelpCircle,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useTheme } from '@/hooks/use-theme';
@@ -44,14 +45,14 @@ export function TopNav() {
   const navLinks = [
     { href: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
     { href: '/my-tasks', label: 'My Tasks', icon: <CheckSquare className="w-4 h-4" /> },
+    { href: '/how-it-works', label: 'How It Works', icon: <HelpCircle className="w-4 h-4" /> },
     { href: '/payment', label: 'Payment', icon: <CreditCard className="w-4 h-4" /> },
     { href: '/profile', label: 'Profile', icon: <User className="w-4 h-4" /> },
   ];
   
   const publicNavLinks = [
-    { href: '/', label: 'Home' },
-    { href: '/#tasks-section', label: 'Tasks' },
-    { href: '/#how-it-works', label: 'How it Works' },
+    { href: '/dashboard', label: 'Home' },
+    { href: '/how-it-works', label: 'How It Works' },
   ];
 
   const handleLogout = async () => {

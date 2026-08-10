@@ -12,8 +12,10 @@ import {
   Timer,
   Sparkles,
 } from 'lucide-react';
+import { useRouter, usePathname } from 'next/navigation';
 import { TaskDocument } from '@/types/firestore';
 import { useAuthContext } from '@/contexts/AuthContext';
+import { useAuthModal } from '@/contexts/AuthModalContext';
 import { useEnrollTask } from '@/hooks/useEnrollTask';
 import { useEnrollmentStatus } from '@/hooks/useEnrollmentStatus';
 import { useTaskAvailability } from '@/hooks/useTaskAvailability';
@@ -29,8 +31,11 @@ interface TaskCardProps {
 }
 
 export function TaskCard({ task }: TaskCardProps) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const { userProfile } = useAuthContext();
+  const { currentUser, userProfile } = useAuthContext();
+  const { openAuthModal } = useAuthModal();
   const { isEnrolled, enrollment } = useEnrollmentStatus(task.id);
   const { enrollTask, isEnrolling } = useEnrollTask();
   const availability = useTaskAvailability(task, isEnrolled);
@@ -51,6 +56,12 @@ export function TaskCard({ task }: TaskCardProps) {
 
   const handleEnrollClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!currentUser) {
+      openAuthModal(task.id);
+      const targetPath = pathname || '/dashboard';
+      router.push(`/login?redirectTo=${encodeURIComponent(targetPath)}&pendingTaskId=${task.id}`);
+      return;
+    }
     if (isEnrolled) {
       window.location.href = `/my-tasks/${enrollment?.id}`;
       return;

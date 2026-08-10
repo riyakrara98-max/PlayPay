@@ -24,6 +24,19 @@ export function safeSerializeValue(val: unknown, depth = 0, seen = new WeakSet()
 
     if (seen.has(obj)) return '[Circular]';
     if (depth > 8) return '[Max Depth Exceeded]';
+    seen.add(obj);
+
+    const constructorName = obj?.constructor?.name || '';
+    if (
+      constructorName.includes('Element') ||
+      constructorName.includes('Node') ||
+      constructorName.includes('Fiber') ||
+      constructorName.includes('Event') ||
+      constructorName.includes('Window') ||
+      constructorName.includes('Document')
+    ) {
+      return `[${constructorName || 'Host Object'}]`;
+    }
 
     // Detect DOM Nodes, Elements, Window, Document
     if (
@@ -56,27 +69,30 @@ export function safeSerializeValue(val: unknown, depth = 0, seen = new WeakSet()
       return '[React Ref]';
     }
 
-    seen.add(obj);
-
     if (Array.isArray(obj)) {
-      const arr = obj.map((item) => safeSerializeValue(item, depth + 1, seen));
-      seen.delete(obj);
-      return arr;
+      return obj.map((item) => safeSerializeValue(item, depth + 1, seen));
     }
 
     if (obj instanceof Date) {
-      seen.delete(obj);
       return obj.toISOString();
     }
 
     const result: Record<string, unknown> = {};
-    const keys = Object.keys(obj);
+    let keys: string[] = [];
+    try {
+      keys = Object.keys(obj);
+    } catch {
+      return '[Unserializable Object]';
+    }
+
     for (const key of keys) {
       if (
         key.startsWith('_react') ||
         key.startsWith('__react') ||
         key === '_targetInst' ||
         key === 'stateNode' ||
+        key === 'child' ||
+        key === 'return' ||
         key === '_model' ||
         key === '_query' ||
         key === 'db' ||
@@ -90,7 +106,6 @@ export function safeSerializeValue(val: unknown, depth = 0, seen = new WeakSet()
         result[key] = '[Unserializable]';
       }
     }
-    seen.delete(obj);
     return result;
   }
 

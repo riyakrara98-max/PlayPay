@@ -152,7 +152,7 @@ export function AnnouncementBar() {
 
   // Badge variant based on highest priority notice
   const highestPriority = notices[0];
-  const badgeText = highestPriority.priority === 1 ? 'URGENT' : 'ANNOUNCEMENT';
+  const badgeText = highestPriority.priority === 1 ? 'URGENT' : 'Notice';
   const badgeVariant = highestPriority.priority === 1 ? 'danger' : 'primary';
 
   return (

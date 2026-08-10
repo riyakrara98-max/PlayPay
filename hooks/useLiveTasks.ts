@@ -21,8 +21,8 @@ export function useLiveTasks() {
   }, []);
 
   useEffect(() => {
-    // Guard: Do NOT create any Firestore query if auth is not ready or user is not logged in
-    if (!initialized || !currentUser) {
+    // Guard: Do NOT create any Firestore query if auth is not ready
+    if (!initialized) {
       setTasks([]);
       setLoading(false);
       setError(null);
@@ -36,11 +36,11 @@ export function useLiveTasks() {
 
     try {
       const db = getFirebaseDb();
-      const isTeamMember = userProfile?.memberType === 'team_member';
-      const isDirectMember = userProfile?.memberType === 'direct' || !isTeamMember; // Default to direct if unspecified
+      const isTeamMember = currentUser && userProfile?.memberType === 'team_member';
+      const isDirectMember = !isTeamMember; // Guest or Direct User default
 
       if (isDirectMember) {
-        // Direct Member: Existing global task behaviour
+        // Direct Member or Guest: Global active tasks query
         const colRef = collection(db, FIRESTORE_COLLECTIONS.TASKS);
         const q = query(colRef, where('status', '==', 'active'));
         

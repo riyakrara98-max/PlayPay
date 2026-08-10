@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
   fallback?: React.ReactNode;
   redirectTo?: string;
+  allowGuestForRoutes?: string[];
 }
 
 /**
@@ -17,17 +18,22 @@ export function ProtectedRoute({
   children,
   fallback = null,
   redirectTo = '/login',
+  allowGuestForRoutes = [],
 }: ProtectedRouteProps) {
   const { currentUser, userProfile, loading, initialized } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   const isAuthenticated = Boolean(currentUser || userProfile);
+  const isGuestAllowed = allowGuestForRoutes.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`)
+  );
 
   useEffect(() => {
-    if (initialized && !loading && !isAuthenticated) {
+    if (initialized && !loading && !isAuthenticated && !isGuestAllowed) {
       router.push(redirectTo);
     }
-  }, [currentUser, userProfile, isAuthenticated, loading, initialized, router, redirectTo]);
+  }, [currentUser, userProfile, isAuthenticated, loading, initialized, router, redirectTo, isGuestAllowed]);
 
   if (!initialized || loading) {
     return fallback ? (
@@ -42,7 +48,7 @@ export function ProtectedRoute({
     );
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated && !isGuestAllowed) {
     return null;
   }
 

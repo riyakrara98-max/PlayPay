@@ -19,6 +19,11 @@ export function AuthModalProvider({ children }: { children: React.ReactNode }) {
   const openAuthModal = useCallback((taskId?: string) => {
     if (taskId) {
       setPendingTaskId(taskId);
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.setItem('playpay_pending_task_id', taskId);
+        } catch {}
+      }
     }
     setIsOpen(true);
   }, []);

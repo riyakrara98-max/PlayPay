@@ -6,24 +6,20 @@ import { getFirebaseDb } from '@/firebase/config';
 import { logFirestoreError, OperationType } from '@/lib/firebase-errors';
 import { safeSerializeValue } from '@/lib/audit-logger';
 
-function safeStringify(val: unknown): string {
-  try {
-    const clean = safeSerializeValue(val);
-    if (clean === undefined) return '';
-    return JSON.stringify(clean);
-  } catch {
-    return '';
-  }
-}
-
 function serializeConstraints(constraints: QueryConstraint[]): string {
   if (!constraints || constraints.length === 0) return '';
   try {
-    const res = safeStringify(constraints);
-    if (res) return res;
-    return constraints.map((c) => (c as any).type || 'constraint').join('-');
+    return constraints
+      .map((c: any) => {
+        const type = c.type || 'constraint';
+        const field = c._field?.path || c.fieldPath || '';
+        const op = c._op || c.op || '';
+        const val = c._value !== undefined ? c._value : c.value !== undefined ? c.value : '';
+        return `${type}_${field}_${op}_${String(val)}`;
+      })
+      .join('|');
   } catch {
-    return constraints.map((c) => (c as any).type || 'constraint').join('-');
+    return constraints.map((c: any) => c.type || 'constraint').join('-');
   }
 }
 

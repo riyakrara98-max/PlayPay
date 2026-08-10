@@ -458,7 +458,7 @@ export default function AdminTaskManagerPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-black text-slate-900 tracking-tight font-heading">Operations Workspace</h1>
-            <p className="text-sm text-slate-500 mt-1">Configure, assign, monitor, and scale tasks in real-time.</p>
+            
           </div>
           <Button
             variant="primary"

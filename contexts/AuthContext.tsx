@@ -53,6 +53,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return null;
       }
 
+      const auth = getFirebaseAuth();
+      // Ensure Firebase client auth currentUser exists and matches uid before making client-side Firestore calls
+      if (!auth.currentUser || auth.currentUser.uid !== firebaseUser.uid) {
+        return null;
+      }
+
       const db = getFirebaseDb();
       const userRef = doc(db, FIRESTORE_COLLECTIONS.USERS, firebaseUser.uid);
       const snap = await getDoc(userRef);
@@ -207,40 +213,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
           setUserProfile(profile);
           await syncServerSession(user, profile);
         } else {
-          try {
-            const res = await fetch('/api/auth/session');
-            const sessionData = await res.json().catch(() => null);
-            if (sessionData && sessionData.authenticated && sessionData.session?.uid) {
-              const serverUid = sessionData.session.uid;
-              const serverEmail = sessionData.session.email || '';
-              const syntheticUser = { uid: serverUid, email: serverEmail } as User;
-              const profile = await syncUserProfile(syntheticUser);
-              if (profile) {
-                setUserProfile(profile);
-                setCurrentUser(syntheticUser);
-              } else {
-                setUserProfile({
-                  uid: serverUid,
-                  email: serverEmail,
-                  role: sessionData.session.role || 'user',
-                  memberType: sessionData.session.memberType || 'pending',
-                  displayName: null,
-                  photoURL: null,
-                  createdAt: new Date().toISOString(),
-                  lastLoginAt: new Date().toISOString(),
-                  isActive: true,
-                  isBanned: false,
-                } as UserDocument);
-                setCurrentUser(syntheticUser);
-              }
-            } else {
-              setUserProfile(null);
-              await syncServerSession(null, null);
-            }
-          } catch {
-            setUserProfile(null);
-            await syncServerSession(null, null);
-          }
+          setUserProfile(null);
+          await syncServerSession(null, null);
         }
         setLoading(false);
         setInitialized(true);

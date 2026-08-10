@@ -52,6 +52,7 @@ import {
 } from 'firebase/firestore';
 
 import { getFirebaseDb } from '@/firebase/config';
+import { parseAndCleanComments } from '@/lib/cleanComment';
 import {
   TaskDocument,
   TaskCategory,
@@ -253,23 +254,10 @@ export function TaskForm({ initialTask = null, isEditMode = false }: TaskFormPro
     }
   };
 
-  // Fixed Comments database analysis
+  // Fixed Comments database analysis (automatically ignores serial numbers like 1., 2., 3., bullet points, etc.)
   const commentAnalysis = useMemo(() => {
     if (commentMode !== 'fixed') return { validComments: [], hasDuplicates: false, duplicates: [] };
-    const lines = rawCommentsText.split('\n').map((line) => line.trim());
-    const validComments: string[] = [];
-    const duplicates: string[] = [];
-    const seen = new Set<string>();
-    lines.forEach((line) => {
-      if (!line) return;
-      if (seen.has(line)) {
-        duplicates.push(line);
-      } else {
-        seen.add(line);
-        validComments.push(line);
-      }
-    });
-    return { validComments, duplicates, hasDuplicates: duplicates.length > 0 };
+    return parseAndCleanComments(rawCommentsText);
   }, [rawCommentsText, commentMode]);
 
   const effectiveTotalSlots = commentMode === 'fixed' ? commentAnalysis.validComments.length : manualSlots;
@@ -1470,14 +1458,32 @@ export function TaskForm({ initialTask = null, isEditMode = false }: TaskFormPro
                           <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
                             Fixed Comment Database <span className="text-rose-500">*</span>
                           </label>
-                          <Badge variant="outline" className="font-mono font-bold text-xs bg-slate-50 px-2 py-1 border-slate-200">
-                            {commentAnalysis.validComments.length} Unique Payout Slots
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            {rawCommentsText.trim().length > 0 && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setRawCommentsText(commentAnalysis.validComments.join('\n'))}
+                                disabled={isLockedByEnrollments}
+                                className="h-7 text-xs font-bold px-2.5 py-1 border-slate-200 text-slate-700 hover:bg-slate-50"
+                              >
+                                Clean Serial Numbers
+                              </Button>
+                            )}
+                            <Badge variant="outline" className="font-mono font-bold text-xs bg-slate-50 px-2 py-1 border-slate-200">
+                              {commentAnalysis.validComments.length} Unique Payout Slots
+                            </Badge>
+                          </div>
                         </div>
+
+                        <p className="text-[11px] text-slate-500 bg-indigo-50/50 p-2.5 rounded-lg border border-indigo-100/60 leading-relaxed">
+                          ✨ <strong>Auto-Formatting Enabled:</strong> Leading serial numbers (e.g. <code>1. </code>, <code>2. </code>), bullet points, and numbers are automatically ignored when saving comments.
+                        </p>
 
                         <Textarea
                           disabled={isLockedByEnrollments}
-                          placeholder="Type or paste reviews/comments here...&#10;Paste exactly ONE complete comment per line.&#10;The line count defines total slots automatically."
+                          placeholder="Type or paste reviews/comments here...&#10;1. I really like the zero brokerage model.&#10;2. I'm impressed with the zero brokerage model.&#10;&#10;(Serial numbers like '1.', '2.' will be automatically ignored!)"
                           value={rawCommentsText}
                           onChange={(e) => {
                             setRawCommentsText(e.target.value);

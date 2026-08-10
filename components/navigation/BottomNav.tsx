@@ -4,7 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion } from 'motion/react';
-import { LayoutDashboard, CheckSquare, CreditCard, User } from 'lucide-react';
+import { LayoutDashboard, CheckSquare, CreditCard, User, HelpCircle } from 'lucide-react';
 import { cn } from '@/utils/cn';
 
 export interface BottomNavItem {
@@ -23,6 +23,12 @@ export function BottomNav() {
       label: 'Home',
       href: '/dashboard',
       icon: <LayoutDashboard className="w-5 h-5" />,
+    },
+    {
+      id: 'how-it-works',
+      label: 'Guide',
+      href: '/how-it-works',
+      icon: <HelpCircle className="w-5 h-5" />,
     },
     {
       id: 'my-tasks',
@@ -58,7 +64,7 @@ export function BottomNav() {
               key={item.id}
               href={item.href}
               className={cn(
-                'relative flex flex-col items-center justify-center py-1.5 px-3 min-w-[64px] min-h-[48px] rounded-[var(--radius-lg)] transition-colors focus-visible:outline-2 focus-visible:outline-[var(--primary)]',
+                'relative flex flex-col items-center justify-center py-1 px-1.5 min-w-[54px] min-h-[48px] rounded-[var(--radius-lg)] transition-colors focus-visible:outline-2 focus-visible:outline-[var(--primary)]',
                 isActive ? 'text-[var(--primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
               )}
             >

@@ -85,6 +85,15 @@ export function RegisterForm() {
         : '/dashboard';
       window.location.href = safeRedirect;
     } catch (err: unknown) {
+      const isPopupClosed =
+        (err as { code?: string })?.code === 'auth/popup-closed-by-user' ||
+        (err instanceof Error && err.message.includes('popup-closed-by-user'));
+
+      if (isPopupClosed) {
+        // User closed the popup intentionally - quietly reset state
+        return;
+      }
+
       console.error('[Google Registration Failure]:', err);
       const message = mapAuthError(err);
       setFormError(message);

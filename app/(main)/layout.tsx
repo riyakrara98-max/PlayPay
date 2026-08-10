@@ -10,7 +10,7 @@ import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   return (
-    <ProtectedRoute>
+    <ProtectedRoute allowGuestForRoutes={['/dashboard', '/how-it-works']}>
       <AppShell header={<TopNav />} bottomNav={<BottomNav />}>
         <ErrorBoundary>
           <PageTransition>{children}</PageTransition>
