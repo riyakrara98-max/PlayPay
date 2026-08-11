@@ -337,6 +337,19 @@ export default function AdminAdsPage() {
         )}
 
         <form onSubmit={handleSave} className="space-y-8 pb-20 md:pb-0">
+          {/* Important Ad Guide Banner */}
+          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2.5">
+            <Megaphone className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <p className="font-extrabold">How to enable Ads on Website:</p>
+              <p className="opacity-90">
+                1. Keep <strong>&quot;Enable Advertisements Globally&quot;</strong> turned <strong>ON</strong> below.<br />
+                2. Paste your Adsterra, Google AdSense, or HTML ad snippet into the placement box.<br />
+                3. Turn <strong>ON</strong> the individual switch for that placement and click <strong>&quot;Save Changes&quot;</strong>.
+              </p>
+            </div>
+          </div>
+
           {/* Master Toggle */}
           <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1">

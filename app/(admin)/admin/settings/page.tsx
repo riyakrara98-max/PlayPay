@@ -176,6 +176,7 @@ export default function AdminSettingsPage() {
         heroBgImageUrl: formData.heroBgImageUrl?.trim() || '',
         heroStartDate: formData.heroStartDate?.trim() || '',
         heroEndDate: formData.heroEndDate?.trim() || '',
+        ads: settings?.ads || formData.ads,
         settingsVersion: nextVersion,
         updatedAt: nowIso,
         updatedBy: currentUser?.uid || 'admin',
