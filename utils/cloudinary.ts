@@ -94,14 +94,17 @@ export function validateCloudinaryMetadata(
     return null;
   }
 
-  return {
+  const result: CloudinaryMetadata = {
     public_id: meta.public_id.trim(),
     secure_url: meta.secure_url.trim(),
-    width: typeof meta.width === 'number' ? meta.width : undefined,
-    height: typeof meta.height === 'number' ? meta.height : undefined,
-    format: typeof meta.format === 'string' ? meta.format : undefined,
-    bytes: typeof meta.bytes === 'number' ? meta.bytes : undefined,
-    resource_type: typeof meta.resource_type === 'string' ? meta.resource_type : undefined,
-    created_at: typeof meta.created_at === 'string' ? meta.created_at : undefined,
   };
+
+  if (typeof meta.width === 'number') result.width = meta.width;
+  if (typeof meta.height === 'number') result.height = meta.height;
+  if (typeof meta.format === 'string') result.format = meta.format;
+  if (typeof meta.bytes === 'number') result.bytes = meta.bytes;
+  if (typeof meta.resource_type === 'string') result.resource_type = meta.resource_type;
+  if (typeof meta.created_at === 'string') result.created_at = meta.created_at;
+
+  return result;
 }

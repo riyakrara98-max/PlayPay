@@ -6,6 +6,24 @@ import { getFirebaseDb } from '@/firebase/config';
 import { SiteSettingsDocument, FIRESTORE_COLLECTIONS } from '@/types/firestore';
 import { logFirestoreError, OperationType } from '@/lib/firebase-errors';
 
+export const DEFAULT_AD_PLACEMENT = {
+  enabled: false,
+  code: '',
+};
+
+export const DEFAULT_ADS_CONFIG = {
+  enabled: false,
+  dashboard: { ...DEFAULT_AD_PLACEMENT },
+  taskList: { ...DEFAULT_AD_PLACEMENT },
+  taskDetails: { ...DEFAULT_AD_PLACEMENT },
+  myTasks: { ...DEFAULT_AD_PLACEMENT },
+  payment: { ...DEFAULT_AD_PLACEMENT },
+  profile: { ...DEFAULT_AD_PLACEMENT },
+  teamLeader: { ...DEFAULT_AD_PLACEMENT },
+  mobile: { ...DEFAULT_AD_PLACEMENT },
+  desktop: { ...DEFAULT_AD_PLACEMENT },
+};
+
 export const DEFAULT_SITE_SETTINGS: SiteSettingsDocument = {
   siteName: 'PlayPay',
   tagline: 'Earn Rewards with Simple Digital Tasks',
@@ -28,6 +46,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettingsDocument = {
   heroBgImageUrl: '',
   heroStartDate: '',
   heroEndDate: '',
+  ads: DEFAULT_ADS_CONFIG,
   settingsVersion: 0,
   updatedAt: new Date().toISOString(),
 };
@@ -95,6 +114,45 @@ export function SiteSettingsProvider({ children }: SiteSettingsProviderProps) {
               heroBgImageUrl: data.heroBgImageUrl || '',
               heroStartDate: data.heroStartDate || '',
               heroEndDate: data.heroEndDate || '',
+              ads: data.ads ? {
+                enabled: typeof data.ads.enabled === 'boolean' ? data.ads.enabled : DEFAULT_ADS_CONFIG.enabled,
+                dashboard: {
+                  enabled: typeof data.ads.dashboard?.enabled === 'boolean' ? data.ads.dashboard.enabled : DEFAULT_AD_PLACEMENT.enabled,
+                  code: data.ads.dashboard?.code || DEFAULT_AD_PLACEMENT.code,
+                },
+                taskList: {
+                  enabled: typeof data.ads.taskList?.enabled === 'boolean' ? data.ads.taskList.enabled : DEFAULT_AD_PLACEMENT.enabled,
+                  code: data.ads.taskList?.code || DEFAULT_AD_PLACEMENT.code,
+                },
+                taskDetails: {
+                  enabled: typeof data.ads.taskDetails?.enabled === 'boolean' ? data.ads.taskDetails.enabled : DEFAULT_AD_PLACEMENT.enabled,
+                  code: data.ads.taskDetails?.code || DEFAULT_AD_PLACEMENT.code,
+                },
+                myTasks: {
+                  enabled: typeof data.ads.myTasks?.enabled === 'boolean' ? data.ads.myTasks.enabled : DEFAULT_AD_PLACEMENT.enabled,
+                  code: data.ads.myTasks?.code || DEFAULT_AD_PLACEMENT.code,
+                },
+                payment: {
+                  enabled: typeof data.ads.payment?.enabled === 'boolean' ? data.ads.payment.enabled : DEFAULT_AD_PLACEMENT.enabled,
+                  code: data.ads.payment?.code || DEFAULT_AD_PLACEMENT.code,
+                },
+                profile: {
+                  enabled: typeof data.ads.profile?.enabled === 'boolean' ? data.ads.profile.enabled : DEFAULT_AD_PLACEMENT.enabled,
+                  code: data.ads.profile?.code || DEFAULT_AD_PLACEMENT.code,
+                },
+                teamLeader: {
+                  enabled: typeof data.ads.teamLeader?.enabled === 'boolean' ? data.ads.teamLeader.enabled : DEFAULT_AD_PLACEMENT.enabled,
+                  code: data.ads.teamLeader?.code || DEFAULT_AD_PLACEMENT.code,
+                },
+                mobile: {
+                  enabled: typeof data.ads.mobile?.enabled === 'boolean' ? data.ads.mobile.enabled : DEFAULT_AD_PLACEMENT.enabled,
+                  code: data.ads.mobile?.code || DEFAULT_AD_PLACEMENT.code,
+                },
+                desktop: {
+                  enabled: typeof data.ads.desktop?.enabled === 'boolean' ? data.ads.desktop.enabled : DEFAULT_AD_PLACEMENT.enabled,
+                  code: data.ads.desktop?.code || DEFAULT_AD_PLACEMENT.code,
+                },
+              } : DEFAULT_ADS_CONFIG,
               settingsVersion: data.settingsVersion ?? 0,
               updatedAt: data.updatedAt || DEFAULT_SITE_SETTINGS.updatedAt,
               updatedBy: data.updatedBy,

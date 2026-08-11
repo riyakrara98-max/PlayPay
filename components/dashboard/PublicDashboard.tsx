@@ -20,6 +20,7 @@ import { TaskGridSkeleton } from '@/components/tasks/TaskCardSkeleton';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { AdSlot } from '@/components/ads/AdSlot';
 
 const INITIAL_VISIBLE_COUNT = 10;
 
@@ -162,6 +163,10 @@ export function PublicDashboard() {
           </section>
         )}
 
+        <div className="w-full max-w-5xl mx-auto px-4 sm:px-6">
+          <AdSlot placement="dashboard" />
+        </div>
+
         {/* ==========================================
             2. AVAILABLE REVIEW TASKS (CORE EARNING SECTION)
             ========================================== */}
@@ -193,17 +198,17 @@ export function PublicDashboard() {
             <div>
               <h2 className="text-lg sm:text-xl font-black text-[var(--text-primary)] font-heading tracking-tight flex items-center gap-2">
                 <Flame className="w-5 h-5 text-amber-500 fill-current" />
-                Available Review Tasks
+                Available Tasks
               </h2>
-              <p className="text-xs text-[var(--text-secondary)] font-medium mt-0.5">
-                Choose any task below, complete the instructions, submit proof, and receive cash after approval.
-              </p>
+              
             </div>
 
             <Badge variant="neutral" size="sm" className="tabular-nums font-bold shrink-0">
               {activeTasks.length} Live
             </Badge>
           </div>
+
+          <AdSlot placement="task-list" />
 
           {/* Task Grid rendering */}
           {loading ? (

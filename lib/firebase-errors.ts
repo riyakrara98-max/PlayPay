@@ -43,10 +43,11 @@ export function mapAuthError(error: unknown): string {
     case 'auth/user-disabled':
       return 'This user account has been disabled.';
     case 'auth/user-not-found':
-      return 'No account was found with this email address.';
+      return 'Account Not Registered: No account exists with this email address. Please register first.';
     case 'auth/wrong-password':
+      return 'Incorrect Password: The password you entered is incorrect. Please try again.';
     case 'auth/invalid-credential':
-      return 'Invalid email or password. Please try again.';
+      return 'Invalid Login Details: Please check if your email is registered or if your password is correct.';
     case 'auth/email-already-in-use':
       return 'An account with this email address already exists.';
     case 'auth/weak-password':

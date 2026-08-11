@@ -54,7 +54,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         )}
         <div className="relative flex items-center w-full">
           {leftIcon && (
-            <div className="absolute left-3 text-[var(--ink-mute)] pointer-events-none flex items-center justify-center">
+            <div className="absolute left-3.5 text-[var(--ink-mute)] pointer-events-none flex items-center justify-center z-10">
               {leftIcon}
             </div>
           )}
@@ -68,15 +68,15 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
               error
                 ? 'border-[var(--ruby)] focus:ring-[var(--ruby)] focus:border-[var(--ruby)]'
                 : 'border-[var(--hairline-input)] hover:border-[var(--primary-soft)]',
-              leftIcon && 'pl-10',
-              rightIcon && 'pr-10',
               sizeStyles[size],
+              leftIcon && '!pl-10',
+              rightIcon && '!pr-10',
               className
             )}
             {...props}
           />
           {rightIcon && (
-            <div className="absolute right-3 text-[var(--ink-mute)] flex items-center justify-center">
+            <div className="absolute right-3.5 text-[var(--ink-mute)] flex items-center justify-center z-10">
               {rightIcon}
             </div>
           )}

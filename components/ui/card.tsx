@@ -18,19 +18,20 @@ export function Card({
   ...props
 }: CardProps) {
   const variantStyles = {
-    default: 'bg-[var(--surface)] border border-[var(--border)] shadow-sm',
-    elevated: 'bg-[var(--surface-elevated)] border border-[var(--border)] shadow-md',
-    outline: 'bg-transparent border border-[var(--border)]',
-    ghost: 'bg-transparent border-transparent',
+    default: 'card-3d rounded-[var(--radius-xl)]',
+    elevated: 'card-3d bg-[var(--surface-elevated)] rounded-[var(--radius-xl)] shadow-md',
+    outline: 'bg-transparent border border-[var(--border)] rounded-[var(--radius-xl)]',
+    ghost: 'bg-transparent border-transparent rounded-[var(--radius-xl)]',
   };
 
   return (
     <motion.div
-      whileHover={isHoverable ? { y: -2, transition: { duration: 0.15 } } : undefined}
+      whileHover={isHoverable ? { y: -3, transition: { duration: 0.2, ease: [0.16, 1, 0.3, 1] } } : undefined}
+      whileTap={isHoverable ? { scale: 0.985, y: 0 } : undefined}
       className={cn(
-        'rounded-[var(--radius-lg)] p-6 text-[var(--text-primary)] transition-all bg-[var(--surface)]',
+        'p-5 sm:p-6 text-[var(--text-primary)] transition-all smooth-render',
         variantStyles[variant],
-        isHoverable && 'hover:shadow-md cursor-pointer',
+        isHoverable && 'cursor-pointer active-push',
         className
       )}
       {...props}

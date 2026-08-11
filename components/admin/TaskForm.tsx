@@ -102,7 +102,7 @@ export function TaskForm({ initialTask = null, isEditMode = false }: TaskFormPro
   const [description, setDescription] = useState(initialTask?.description || '');
   const [instructions, setInstructions] = useState(
     initialTask?.instructions ||
-      '1. Download the app from the official Google Play Store.\n2. Open the app and complete registration.\n3. Search and post your assigned review/comment.\n4. Take a clear screenshot of your published comment and upload proof.'
+      '1. Download the app from the official Google Play Store.\n2. Open the app.\n3. Search and post your assigned review/comment.\n4. Take a clear screenshot of your published comment and upload proof.'
   );
   const [appIcon, setAppIcon] = useState(initialTask?.appIcon || '');
 

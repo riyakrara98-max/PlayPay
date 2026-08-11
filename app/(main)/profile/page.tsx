@@ -45,6 +45,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Spinner } from '@/components/ui/spinner';
+import { AdSlot } from '@/components/ads/AdSlot';
 
 import {
   formatPhoneNumber,
@@ -274,6 +275,8 @@ export default function ProfilePage() {
         subtitle="Manage your personal details, payment accounts, security credentials, and view lifetime task statistics."
       />
 
+      <AdSlot placement="profile" />
+
       <div className="flex flex-col gap-6 mt-2">
         {/* Profile Card Header */}
         <ContentContainer variant="card" className="flex flex-col sm:flex-row items-center gap-6 p-6">
@@ -368,7 +371,7 @@ export default function ProfilePage() {
           <div className="flex items-center gap-2 pb-2 border-b border-[var(--border)]">
             <User className="w-4 h-4 text-[var(--primary)]" />
             <h3 className="text-sm font-bold font-heading text-[var(--text-primary)]">
-              System Account Info (Read Only)
+              Account Info
             </h3>
           </div>
 
@@ -389,21 +392,9 @@ export default function ProfilePage() {
               leftIcon={<Mail className="w-4 h-4" />}
             />
 
-            <Input
-              label="User ID (UID)"
-              value={currentUser?.uid || ''}
-              readOnly
-              disabled
-              leftIcon={<Hash className="w-4 h-4" />}
-            />
+            
 
-            <Input
-              label="Account Created Date"
-              value={formattedDate}
-              readOnly
-              disabled
-              leftIcon={<Calendar className="w-4 h-4" />}
-            />
+          
           </div>
         </ContentContainer>
 

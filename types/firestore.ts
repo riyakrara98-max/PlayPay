@@ -181,6 +181,24 @@ export interface EnrollmentDocument {
   paymentReference?: string;
 }
 
+export interface AdPlacementConfig {
+  enabled: boolean;
+  code: string;
+}
+
+export interface AdsSettings {
+  enabled: boolean;
+  dashboard: AdPlacementConfig;
+  taskList: AdPlacementConfig;
+  taskDetails: AdPlacementConfig;
+  myTasks: AdPlacementConfig;
+  payment: AdPlacementConfig;
+  profile: AdPlacementConfig;
+  teamLeader: AdPlacementConfig;
+  mobile: AdPlacementConfig;
+  desktop: AdPlacementConfig;
+}
+
 export interface SiteSettingsDocument {
   siteName: string;
   tagline?: string;
@@ -204,6 +222,7 @@ export interface SiteSettingsDocument {
   heroBgImageUrl?: string;
   heroStartDate?: string;
   heroEndDate?: string;
+  ads?: AdsSettings;
   settingsVersion?: number;
   updatedAt: string;
   updatedBy?: string;

@@ -53,7 +53,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label="Mobile bottom navigation"
-      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[var(--surface)]/90 backdrop-blur-lg border-t border-[var(--border)] px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 transition-transform duration-200"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-40 native-nav-blur border-t border-[var(--border)] px-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-2 transition-all duration-200 shadow-lg"
     >
       <div className="flex items-center justify-around max-w-md mx-auto">
         {items.map((item) => {
@@ -64,8 +64,8 @@ export function BottomNav() {
               key={item.id}
               href={item.href}
               className={cn(
-                'relative flex flex-col items-center justify-center py-1 px-1.5 min-w-[54px] min-h-[48px] rounded-[var(--radius-lg)] transition-colors focus-visible:outline-2 focus-visible:outline-[var(--primary)]',
-                isActive ? 'text-[var(--primary)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                'relative flex flex-col items-center justify-center py-1 px-1.5 min-w-[54px] min-h-[48px] rounded-[var(--radius-lg)] transition-all active-push focus-visible:outline-2 focus-visible:outline-[var(--primary)]',
+                isActive ? 'text-[var(--primary)] font-bold' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'
               )}
             >
               {isActive && (

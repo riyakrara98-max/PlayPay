@@ -18,6 +18,7 @@ import {
   Sun,
   Moon,
   QrCode,
+  Megaphone,
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 import { useAuth } from '@/hooks/useAuth';
@@ -112,6 +113,11 @@ export function AdminSidebar({
       href: '/admin/settings',
       label: 'Site Settings',
       icon: <Settings className="w-5 h-5 shrink-0" />,
+    },
+    {
+      href: '/admin/ads',
+      label: 'Ads Setup',
+      icon: <Megaphone className="w-5 h-5 shrink-0" />,
     },
   ];
 

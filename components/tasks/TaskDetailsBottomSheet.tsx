@@ -22,6 +22,7 @@ import { useEnrollTask } from '@/hooks/useEnrollTask';
 import { useEnrollmentStatus } from '@/hooks/useEnrollmentStatus';
 import { useTaskAvailability } from '@/hooks/useTaskAvailability';
 import { resolveMemberReward } from '@/lib/rewardResolver';
+import { AdSlot } from '@/components/ads/AdSlot';
 
 interface TaskDetailsBottomSheetProps {
   task: TaskDocument | null;
@@ -233,6 +234,8 @@ function TaskDetailsContent({
             </p>
           </div>
         )}
+
+        <AdSlot placement="task-details" />
       </div>
 
       {/* Sticky Action Footer */}

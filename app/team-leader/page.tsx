@@ -11,6 +11,7 @@ import { TaskAnalyticsCard } from '@/components/team-leader/TaskAnalyticsCard';
 import { RewardInsightsCard } from '@/components/team-leader/RewardInsightsCard';
 import { RecentActivityCard } from '@/components/team-leader/RecentActivityCard';
 import { format } from 'date-fns';
+import { AdSlot } from '@/components/ads/AdSlot';
 
 type FilterType = 'all' | 'active' | 'pending_reward' | 'completed' | 'paused';
 type SortType = 'newest' | 'oldest' | 'reward_high' | 'reward_low' | 'completion_high';
@@ -141,6 +142,8 @@ export default function TeamLeaderDashboardPage() {
           </div>
         </div>
       </div>
+
+      <AdSlot placement="team-leader" />
 
       {loading ? (
         <div className="animate-pulse space-y-6">

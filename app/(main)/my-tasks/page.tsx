@@ -25,6 +25,7 @@ import { EnrollmentDocument, FIRESTORE_COLLECTIONS } from '@/types/firestore';
 import { MyTaskCard } from '@/components/tasks/MyTaskCard';
 import { TaskGridSkeleton } from '@/components/tasks/TaskCardSkeleton';
 import { getSafeTime } from '@/utils/formatters';
+import { AdSlot } from '@/components/ads/AdSlot';
 
 type FilterTab = 'all' | 'enrolled' | 'submitted' | 'approved' | 'rejected';
 
@@ -104,6 +105,8 @@ export default function MyTasksPage() {
         title="My Tasks"
         subtitle="Track your enrolled tasks, check verification status, resubmit proof, and view earned rewards."
       />
+
+      <AdSlot placement="my-tasks" />
 
       {/* Main Content Area */}
       {isLoading ? (

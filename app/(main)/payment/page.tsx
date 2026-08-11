@@ -28,6 +28,7 @@ import { PaymentCard } from '@/components/payment/PaymentCard';
 import { WhatsAppConfirmationModal } from '@/components/payment/WhatsAppConfirmationModal';
 import { TaskGridSkeleton } from '@/components/tasks/TaskCardSkeleton';
 import { logFirestoreError, OperationType } from '@/lib/firebase-errors';
+import { AdSlot } from '@/components/ads/AdSlot';
 
 export default function PaymentPage() {
   const { currentUser, loading: authLoading } = useAuthContext();
@@ -164,6 +165,8 @@ export default function PaymentPage() {
         title="Payment Request"
         subtitle="Request direct payout for your approved tasks via WhatsApp. Verified payouts are processed manually by Admin."
       />
+
+      <AdSlot placement="payment" />
 
       {/* Global Toast Notification */}
       <AnimatePresence>
